@@ -13,6 +13,7 @@ import json
 import os
 import re
 import secrets
+import string
 import shutil
 import sys
 import tempfile
@@ -43,7 +44,9 @@ def materialize(dest: Path) -> dict:
     key = "-----BEGIN RSA PRIVATE KEY-----\n" + "\n".join(body[i:i + 64] for i in range(0, len(body), 64)) + \
           "\n-----END RSA PRIVATE KEY-----\n"
     (dest / "deploy_key.pem").write_text(key)
-    token = secrets.token_hex(20)
+    # Mixed-case alphanumerics: a hex token falls under gitleaks' entropy threshold ~2% of the time,
+    # which made the secrets assertion flaky.
+    token = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(40))
     (dest / "settings_local.py").write_text(f'PAYMENTS_API_KEY = "{token}"\n')
     return marks
 
