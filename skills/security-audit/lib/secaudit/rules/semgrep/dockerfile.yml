@@ -1,0 +1,44 @@
+rules:
+  - id: dockerfile-no-user
+    languages: [dockerfile]
+    severity: WARNING
+    message: The image never switches to a non-root USER before CMD/ENTRYPOINT, so the application runs as root.
+    metadata:
+      cwe: ["CWE-250"]
+      confidence: "medium"
+      impact: "medium"
+      vuln_class: "excessive-privilege"
+      category: "config"
+      title: "Container runs as root"
+      fix: "Create an unprivileged user and add a USER instruction before CMD."
+    # Reported on the FROM line. Regex because Semgrep's Dockerfile patterns do not
+    # express "no USER anywhere before CMD" reliably across exec/shell forms.
+    pattern-regex: (?sm)\A(?:(?!^USER\s).)*?^FROM\s[^\n]*(?=(?:(?!^USER\s).)*^(?:CMD|ENTRYPOINT)\b)
+
+  - id: dockerfile-secret-in-env
+    languages: [dockerfile]
+    severity: ERROR
+    message: A credential-like value is baked into the image with ENV/ARG and is visible in image layers.
+    metadata:
+      cwe: ["CWE-798"]
+      confidence: "medium"
+      impact: "high"
+      vuln_class: "hardcoded-secret"
+      category: "config"
+      title: "Secret baked into image"
+      fix: "Pass secrets at runtime or use BuildKit secret mounts."
+    pattern-regex: (?mi)^(?:ENV|ARG)\s+\w*(?:pass|secret|token|api_?key|credential)\w*\s*[= ]\s*\S+
+
+  - id: dockerfile-curl-pipe-shell
+    languages: [dockerfile]
+    severity: WARNING
+    message: A remote script is piped straight into a shell during the build (no integrity check).
+    metadata:
+      cwe: ["CWE-494"]
+      confidence: "high"
+      impact: "medium"
+      vuln_class: "supply-chain"
+      category: "config"
+      title: "Remote script piped to shell"
+      fix: "Download, verify a pinned checksum or signature, then execute."
+    pattern-regex: (?m)^RUN\s.*(?:curl|wget)[^|\n]*\|\s*(?:sh|bash)\b

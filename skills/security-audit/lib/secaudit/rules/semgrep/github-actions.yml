@@ -1,0 +1,65 @@
+rules:
+  - id: gha-pull-request-target-checkout-head
+    languages: [yaml]
+    severity: ERROR
+    message: pull_request_target workflow checks out the PR head, running untrusted code with a privileged token.
+    paths: {include: [".github/workflows/*.yml", ".github/workflows/*.yaml", "*/.github/workflows/*.yml"]}
+    metadata:
+      cwe: ["CWE-829"]
+      confidence: "high"
+      impact: "critical"
+      vuln_class: "ci-injection"
+      category: "config"
+      title: "Untrusted checkout in pull_request_target"
+      fix: "Use pull_request, or never check out/run PR code in a pull_request_target job."
+    patterns:
+      - pattern-inside: |
+          on: ...
+          ...
+      - pattern-inside: |
+          on:
+            ...
+            pull_request_target: ...
+            ...
+          ...
+      - pattern: |
+          ref: $REF
+      - metavariable-regex:
+          metavariable: $REF
+          regex: .*github\.event\.pull_request\.head.*
+
+  - id: gha-script-injection
+    languages: [yaml]
+    severity: ERROR
+    message: Attacker-controlled event data is interpolated directly into a run script.
+    paths: {include: [".github/workflows/*.yml", ".github/workflows/*.yaml", "*/.github/workflows/*.yml"]}
+    metadata:
+      cwe: ["CWE-78"]
+      confidence: "high"
+      impact: "high"
+      vuln_class: "ci-injection"
+      category: "config"
+      title: "GitHub Actions script injection"
+      fix: "Pass the value through an env variable and quote it in the script."
+    patterns:
+      - pattern: |
+          run: $CMD
+      - metavariable-regex:
+          metavariable: $CMD
+          regex: (?s).*\$\{\{\s*github\.event\.(issue|pull_request|comment|review|head_commit|pages)[^}]*(title|body|message|name|label|ref)[^}]*\}\}.*
+
+  - id: gha-write-all-permissions
+    languages: [yaml]
+    severity: WARNING
+    message: Workflow grants write-all permissions to GITHUB_TOKEN.
+    paths: {include: [".github/workflows/*.yml", ".github/workflows/*.yaml", "*/.github/workflows/*.yml"]}
+    metadata:
+      cwe: ["CWE-250"]
+      confidence: "high"
+      impact: "medium"
+      vuln_class: "ci-permissions"
+      category: "config"
+      title: "Overly broad workflow permissions"
+      fix: "Set least-privilege permissions per job."
+    pattern: |
+      permissions: write-all

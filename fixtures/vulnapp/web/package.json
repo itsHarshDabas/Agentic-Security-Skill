@@ -1,0 +1,10 @@
+{
+  "name": "vulnapp-web",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "express": "4.16.0",
+    "lodash": "4.17.4",
+    "minimist": "1.2.0"
+  }
+}

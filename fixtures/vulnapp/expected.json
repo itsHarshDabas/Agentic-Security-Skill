@@ -1,0 +1,47 @@
+{
+  "description": "Ground truth for the vulnapp benchmark. Line numbers come from SEED/DECOY markers at test time.",
+  "seeds": {
+    "hardcoded-flask-secret": {"cwe": "CWE-798", "detect": "scanner"},
+    "weak-password-hash":     {"cwe": "CWE-916", "detect": "scanner"},
+    "sqli-login":             {"cwe": "CWE-89",  "detect": "scanner"},
+    "open-redirect":          {"cwe": "CWE-601", "detect": "scanner"},
+    "idor-invoice":           {"cwe": "CWE-639", "detect": "contextual"},
+    "mass-assignment":        {"cwe": "CWE-915", "detect": "contextual"},
+    "sqli-column-names":      {"cwe": "CWE-89",  "detect": "scanner"},
+    "missing-admin-authz":    {"cwe": "CWE-285", "detect": "contextual"},
+    "path-traversal":         {"cwe": "CWE-22",  "detect": "scanner"},
+    "command-injection":      {"cwe": "CWE-78",  "detect": "scanner"},
+    "ssrf":                   {"cwe": "CWE-918", "detect": "scanner"},
+    "unsafe-yaml":            {"cwe": "CWE-502", "detect": "scanner"},
+    "unsafe-pickle":          {"cwe": "CWE-502", "detect": "scanner"},
+    "ssti":                   {"cwe": "CWE-1336","detect": "scanner"},
+    "flask-debug":            {"cwe": "CWE-489", "detect": "scanner"},
+    "js-xss":                 {"cwe": "CWE-79",  "detect": "scanner"},
+    "js-eval":                {"cwe": "CWE-95",  "detect": "scanner"},
+    "js-command-injection":   {"cwe": "CWE-78",  "detect": "scanner"},
+    "js-path-traversal":      {"cwe": "CWE-22",  "detect": "scanner"}
+  },
+  "config_seeds": [
+    {"id": "docker-root",            "file": "Dockerfile",               "pattern": "^FROM "},
+    {"id": "docker-env-secret",      "file": "Dockerfile",               "pattern": "^ENV DB_PASSWORD"},
+    {"id": "docker-curl-sh",         "file": "Dockerfile",               "pattern": "curl .*\\| sh"},
+    {"id": "compose-privileged",     "file": "docker-compose.yml",       "pattern": "privileged: true"},
+    {"id": "compose-docker-sock",    "file": "docker-compose.yml",       "pattern": "docker.sock"},
+    {"id": "compose-db-port",        "file": "docker-compose.yml",       "pattern": "5432:5432"},
+    {"id": "gha-write-all",          "file": ".github/workflows/ci.yml", "pattern": "permissions: write-all"},
+    {"id": "gha-prt-checkout",       "file": ".github/workflows/ci.yml", "pattern": "ref: .*head.sha"},
+    {"id": "gha-script-injection",   "file": ".github/workflows/ci.yml", "pattern": "pull_request.title"}
+  ],
+  "decoys": {
+    "parameterized-query":   "Parameterized LIKE query; the f-string builds the bound value, not SQL.",
+    "fixed-argv-subprocess": "Constant argv, shell=False.",
+    "md5-etag":              "MD5 used for an ETag, not for security.",
+    "random-jitter":         "Non-cryptographic randomness for timing jitter.",
+    "lodash-merge":          "Safe merge call; the risk is the vulnerable lodash version, reported by SCA."
+  },
+  "vulnerable_packages": {
+    "pypi": ["flask", "jinja2", "pyyaml", "requests"],
+    "npm": ["lodash", "minimist", "express"]
+  },
+  "injected_secrets": ["private-key", "generic-api-key"]
+}

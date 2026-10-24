@@ -1,0 +1,54 @@
+rules:
+  - id: compose-privileged
+    languages: [yaml]
+    severity: ERROR
+    message: Service runs privileged, which disables container isolation.
+    paths: {include: ["docker-compose*.yml", "docker-compose*.yaml", "compose.yml", "compose.yaml", "compose.*.yml", "compose.*.yaml"]}
+    metadata:
+      cwe: ["CWE-250"]
+      confidence: "high"
+      impact: "high"
+      vuln_class: "excessive-privilege"
+      category: "config"
+      title: "Privileged container"
+      fix: "Remove privileged and grant only the specific capabilities needed."
+    pattern: |
+      privileged: true
+
+  - id: compose-docker-socket
+    languages: [yaml]
+    severity: ERROR
+    message: The Docker socket is mounted into a container, giving it root on the host.
+    paths: {include: ["docker-compose*.yml", "docker-compose*.yaml", "compose.yml", "compose.yaml", "compose.*.yml", "compose.*.yaml"]}
+    metadata:
+      cwe: ["CWE-250"]
+      confidence: "high"
+      impact: "critical"
+      vuln_class: "excessive-privilege"
+      category: "config"
+      title: "Docker socket mounted"
+      fix: "Do not mount /var/run/docker.sock; use a restricted API proxy if needed."
+    patterns:
+      - pattern: $X
+      - metavariable-regex:
+          metavariable: $X
+          regex: .*/var/run/docker\.sock.*
+
+  - id: compose-db-port-all-interfaces
+    languages: [yaml]
+    severity: WARNING
+    message: A database port is published on all interfaces.
+    paths: {include: ["docker-compose*.yml", "docker-compose*.yaml", "compose.yml", "compose.yaml", "compose.*.yml", "compose.*.yaml"]}
+    metadata:
+      cwe: ["CWE-668"]
+      confidence: "medium"
+      impact: "medium"
+      vuln_class: "exposed-service"
+      category: "config"
+      title: "Database port exposed"
+      fix: "Bind to 127.0.0.1 or keep the database on an internal network only."
+    patterns:
+      - pattern: $P
+      - metavariable-regex:
+          metavariable: $P
+          regex: ^"?(0\.0\.0\.0:)?(5432|3306|27017|6379|9200):\d+"?$
