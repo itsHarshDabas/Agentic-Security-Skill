@@ -125,6 +125,12 @@ def cmd_dast(a):
     return 0
 
 
+def cmd_history(a):
+    from .history import history
+    print(json.dumps(history(Path(a.runs_dir), a.target), indent=2))
+    return 0
+
+
 def cmd_compare(a):
     from .verification import compare
     print(json.dumps(compare(Path(a.old), Path(a.new)), indent=2))
@@ -204,6 +210,10 @@ def main(argv=None):
     dp.add_argument("--zap", action="store_true", help="also run OWASP ZAP baseline (passive) if installed")
     dp.add_argument("--timeout", type=int, default=900)
     dp.set_defaults(fn=cmd_dast)
+    hp = sub.add_parser("history", help="trend of findings and check coverage across runs of one target")
+    hp.add_argument("runs_dir")
+    hp.add_argument("--target")
+    hp.set_defaults(fn=cmd_history)
     cp = sub.add_parser("compare", help="diff two report.json files by stable finding ID")
     cp.add_argument("old")
     cp.add_argument("new")

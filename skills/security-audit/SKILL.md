@@ -1,12 +1,12 @@
 ---
 name: security-audit
-description: Evidence-driven security audit of a local repository the operator is authorized to assess. Runs real scanners (Semgrep, Bandit, Gitleaks, OSV-Scanner, pip-audit, npm audit) through a scope-enforcing engine, normalizes and deduplicates findings, guides contextual review for issues scanners miss (authorization, IDOR, business logic), and writes Markdown + JSON reports that state exactly which checks ran, failed or were skipped. Use when asked to audit, security review, pentest (static), or find vulnerabilities in a codebase.
+description: Evidence-driven security audit of a local repository the operator is authorized to assess. Runs real scanners (Semgrep, Bandit, Gitleaks incl. git history, Checkov, OSV-Scanner, pip-audit, npm audit) through a scope-enforcing engine, normalizes and deduplicates findings, guides contextual review for issues scanners miss (authorization, IDOR, business logic), and writes Markdown + JSON reports that state exactly which checks ran, failed or were skipped. Use when asked to audit, security review, pentest (static), or find vulnerabilities in a codebase.
 license: MIT
 compatibility: Requires Python 3.10+ and shell access. Scanners are optional individually; missing ones are reported as UNAVAILABLE. Dependency checks need network access granted in a scope manifest.
 allowed-tools: Bash(${CLAUDE_SKILL_DIR}/scripts/secaudit *) Read Grep Glob
 metadata:
   version: "0.1.0"
-  phase: "5 (passive dynamic checks)"
+  phase: "6 (IaC, history secrets, trends)"
 ---
 
 # Security audit
@@ -66,7 +66,9 @@ ${CLAUDE_SKILL_DIR}/scripts/secaudit dast <run> --url http://127.0.0.1:8000/ [--
 This is passive: GET requests only (plus one request with a harmless `Origin` header for CORS), no payloads, redirects not followed, request budget enforced. It checks security headers, cookie flags, CORS, version banners and debug/stack-trace output. Do not use other tools (curl, scripts) to go beyond it; active testing (injection, auth bypass, fuzzing) is out of scope for this skill.
 
 ## Re-scans and tracking
-Pass `--baseline <old report.json>` to label findings `new` or `recurring` and list ones no longer reported. "No longer reported" is not proof of a fix.
+Pass `--baseline <old report.json>` to label findings `new` or `recurring` and list ones no longer reported. "No longer reported" is not proof of a fix. `secaudit history <runs-dir> [--target <dir>]` shows the trend across runs, including checks that did not complete in each run.
+
+Secrets found by `gitleaks-history` are in past commits: say so plainly, and recommend rotation over history rewriting.
 
 ## References
 - `references/scope-manifest.md`: manifest format and permission meanings
