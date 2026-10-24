@@ -80,6 +80,35 @@ def cmd_report(a):
     return 0
 
 
+def cmd_fix(a):
+    from .remediation import FixSession
+    if a.fix_cmd == "start":
+        fs = FixSession.start(Path(a.run_dir))
+        out = {"session": str(fs.dir), "fix_worktree": str(fs.fix), "branch": fs.state["branch"],
+               "head": fs.state["head"]}
+    else:
+        fs = FixSession(Path(a.run_dir))
+        if a.fix_cmd == "plan":
+            out = fs.plan(a.finding)
+        elif a.fix_cmd == "apply":
+            out = fs.apply_patch(a.finding, Path(a.patch), approve=a.approve, no_test_reason=a.no_test_reason)
+        elif a.fix_cmd == "record":
+            out = fs.record(a.finding, approve=a.approve, no_test_reason=a.no_test_reason)
+        elif a.fix_cmd == "test":
+            out = fs.test(a.finding, a.test_cmd, timeout=a.timeout)
+        elif a.fix_cmd == "diff":
+            out = fs.diff()
+        elif a.fix_cmd == "commit":
+            out = {"commit": fs.commit(a.message), "branch": fs.state["branch"], "pushed": False}
+        elif a.fix_cmd == "cleanup":
+            fs.cleanup()
+            out = {"removed_worktrees": True, "branch_kept": fs.state["branch"]}
+    print(json.dumps(out, indent=2))
+    if isinstance(out, dict) and out.get("status") in ("REJECTED", "APPROVAL_REQUIRED"):
+        return 4
+    return 0
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="secaudit", description="Evidence-driven, scope-enforced security audit")
     p.add_argument("--version", action="version", version=__version__)
@@ -112,7 +141,39 @@ def main(argv=None):
     sp.add_argument("run_dir")
     sp.set_defaults(fn=cmd_report)
 
+    fp = sub.add_parser("fix", help="Phase 3: controlled remediation in an isolated git worktree")
+    fsub = fp.add_subparsers(dest="fix_cmd", required=True)
+    x = fsub.add_parser("start", help="create fix/base worktrees (needs modify_source)")
+    x.add_argument("run_dir")
+    x = fsub.add_parser("plan", help="write a remediation plan for findings")
+    x.add_argument("run_dir")
+    x.add_argument("--finding", action="append", required=True)
+    for name, helptext in (("apply", "apply a unified diff to the fix worktree, then gate and record it"),
+                           ("record", "gate and record edits made directly in the fix worktree")):
+        x = fsub.add_parser(name, help=helptext)
+        x.add_argument("run_dir")
+        x.add_argument("--finding", required=True)
+        if name == "apply":
+            x.add_argument("--patch", required=True)
+        x.add_argument("--approve", action="store_true", help="operator approved a change that needs approval")
+        x.add_argument("--no-test-reason", help="accept a fix without a regression test (caps status)")
+    x = fsub.add_parser("test", help="red/green regression test (needs execute_project_code)")
+    x.add_argument("run_dir")
+    x.add_argument("--finding", required=True)
+    x.add_argument("--timeout", type=int, default=900)
+    x.add_argument("test_cmd", nargs=argparse.REMAINDER, help="test command after --, run without a shell")
+    x = fsub.add_parser("diff", help="show the full fix diff and gate results")
+    x.add_argument("run_dir")
+    x = fsub.add_parser("commit", help="commit recorded fixes on the session branch (needs commit); never pushes")
+    x.add_argument("run_dir")
+    x.add_argument("-m", "--message", required=True)
+    x = fsub.add_parser("cleanup", help="remove the session worktrees, keep the branch")
+    x.add_argument("run_dir")
+    fp.set_defaults(fn=cmd_fix)
+
     a = p.parse_args(argv)
+    if getattr(a, "test_cmd", None) and a.test_cmd[:1] == ["--"]:
+        a.test_cmd = a.test_cmd[1:]
     try:
         return a.fn(a)
     except (ScopeError, TriageError) as e:

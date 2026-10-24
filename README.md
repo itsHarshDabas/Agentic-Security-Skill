@@ -19,7 +19,7 @@ works from any shell or agent.
 | 0 | Platform validation, architecture, threat model ([docs/DESIGN.md](docs/DESIGN.md)) | Implemented |
 | 1 | Discovery, SAST, SCA, secrets, normalization, MD/JSON reports, scope gate | Implemented, tested |
 | 2 | Cross-tool dedup, evidence context, confidence model, risk prioritization, triage workflow, seeded benchmark | Implemented, tested |
-| 3 | Isolated remediation, regression tests, approval gates | Designed (manual procedure in `references/remediation.md`), not implemented |
+| 3 | Isolated remediation (git worktree, hardened git), patch gates, red/green regression tests, approval gates | Implemented, tested |
 | 4 | Automated verification, regression detection | Partly: `--baseline` tracks new/recurring/no-longer-reported findings; no fix verification yet |
 | 5 | DAST/API testing (ZAP) on approved targets | Planned |
 | 6 | More ecosystems, Trivy, fuzzing, history scanning | Planned |
