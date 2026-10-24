@@ -52,7 +52,8 @@ def render(store: RunStore) -> None:
         "coverage_limitations": LIMITATIONS,
         "findings": findings,
         "triage_log": state.get("triage_log", []),
-        "remediation": {"status": "not performed", "note": "Remediation is Phase 3; no source files were modified."},
+        "remediation": state.get("verification") or {"status": "not performed",
+                                                     "note": "No fix session was verified for this run; no source files were modified."},
         "evidence_integrity": {"manifest": "evidence/manifest.json", "mismatched_files": tampered},
     })
     store.write_json("report.json", report)
@@ -172,8 +173,34 @@ def _markdown(r: dict) -> str:
         w("A finding that is no longer reported is not proof it was fixed; verification is Phase 4.\n")
 
     w("## Remediation and verification\n")
-    w("Not performed in this run (Phase 3/4). No fixes were applied, so there is no before/after comparison "
-      "and no finding has status FIXED_VERIFIED.\n")
+    v = r["remediation"]
+    if v.get("results") is None:
+        w("Not performed for this run. No fixes were applied, so there is no before/after comparison "
+          "and no finding has status FIXED_VERIFIED.\n")
+    else:
+        sm = v["summary"]
+        w(f"Fixes on branch `{v['fix_branch']}` (not pushed). Re-scan: {', '.join(f'{k} {s}' for k, s in v['rescan_checks'].items() if s in ('COMPLETED', 'PARTIAL', 'FAILED', 'BLOCKED', 'TIMED_OUT'))}.\n")
+        w("| Finding | Severity | Status | Evidence |")
+        w("|---|---|---|---|")
+        for x in v["results"]:
+            w(f"| `{x['finding']}` {_esc(x['title'][:50])} | {x['severity']} | **{x['status']}** | {_esc('; '.join(x['evidence']))} |")
+        w("")
+        w(f"- Before: {sm['findings_before']} active findings ({', '.join(f'{n} {k}' for k, n in sm['by_severity_before'].items() if n)})")
+        w(f"- After (re-scan of the fixed tree): {sm['findings_after']} ({', '.join(f'{n} {k}' for k, n in sm['by_severity_after'].items() if n) or 'none'})")
+        w(f"- Remediation success rate {sm['remediation_success_rate']}, verification coverage {sm['verification_coverage']}, "
+          f"regression rate {sm['regression_rate']}")
+        if sm["suite_passed"] is not None:
+            w(f"- Project test suite on the fixed tree: {'passed' if sm['suite_passed'] else '**FAILED**'}")
+        w(f"- Operator's uncommitted changes unchanged: {'yes' if sm['operator_tree_unchanged'] else '**NO**'}")
+        if v["introduced"]:
+            w(f"\n**New findings introduced by the fixes ({len(v['introduced'])}):**\n")
+            for x in v["introduced"]:
+                loc = x["location"] or {}
+                w(f"- `{x['id']}` {_esc(x['title'])} ({x['severity']}) at `{loc.get('path')}:{loc.get('start_line') or ''}`")
+        w("")
+        for lim in v["limitations"]:
+            w(f"- {lim}")
+        w("")
     w("## Residual risk and next actions\n")
     w("- Triage every high/critical `unverified` finding: confirm with code inspection or mark false positive with a rationale.")
     w("- Review the highest-risk files above for authorization and business-logic flaws scanners cannot see.")

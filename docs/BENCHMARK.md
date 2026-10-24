@@ -22,7 +22,8 @@
 | `confirmed_without_triage` | Findings marked confirmed with no rationale. Must be empty |
 | `mean_risk_seeded` / `mean_risk_decoys` | Mean Phase 2 risk score of findings on seeded vs decoy lines. Seeds should rank higher |
 | `scan_duration_s` | Wall time of `scan` |
-| Remediation / verification metrics | Produced by the Phase 3/4 remediation benchmark tests (`tests/test_remediation*.py`) |
+| `status_accuracy` (`--remediation`) | Verifier-assigned status matches the expected status across the four scripted fix scenarios |
+| `remediation_success_rate` / `verification_coverage` / `regression_rate` | Per verify run: FIXED_VERIFIED / attempted; fixes with red/green or detector evidence / attempted; fixes that introduced new findings in changed files / attempted |
 
 ## Limitations
 - One small fixture written by the same author as the bundled Semgrep rules. Recall here is an upper bound and a regression guard, not an estimate of real-world recall.
