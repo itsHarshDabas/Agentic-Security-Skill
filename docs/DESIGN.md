@@ -95,7 +95,7 @@ See `skills/security-audit/references/finding-schema.md`. Key points:
 |---|---|---|---|
 | 0 | Platform, architecture, threat model | This document | Implemented |
 | 1 | Discovery, SAST, SCA, secrets, normalization, MD/JSON reports, scope gate | AC 1,2,3,4,6,7,13,14,15 on the fixture; benchmark recall reported | Implemented + tested (see README) |
-| 2 | Dedup tuning, confidence, evidence snippets, triage workflow, benchmark metrics | AC 5,6; precision/recall/FP rate tracked per run | Partially implemented (triage merge + benchmark script) |
+| 2 | Dedup tuning, confidence, evidence snippets, risk prioritization, triage workflow, benchmark metrics | AC 5,6; precision/recall/FP rate tracked per run | Implemented + tested |
 | 3 | Remediation: worktree isolation, regression tests, diff review, approval gates | AC 8,9,12 | Planned |
 | 4 | Verification: re-scan, diff findings, regression detection | AC 10,11 | Planned |
 | 5 | DAST/API testing against approved local targets (ZAP), rate limits | Scope enforcement tests on URLs | Planned |

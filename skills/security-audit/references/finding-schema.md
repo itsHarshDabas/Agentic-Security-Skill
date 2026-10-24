@@ -33,6 +33,11 @@
 | `root_cause`, `impact`, `reproduction`, `remediation`, `verification` | Filled by tools where possible, otherwise by triage. |
 | `remediation_status` | Phase 3/4: `FIXED_VERIFIED`, `PARTIALLY_MITIGATED`, `FIX_APPLIED_UNVERIFIED`, `UNRESOLVED`, `BLOCKED`, `FALSE_POSITIVE`. Only `FALSE_POSITIVE` is set in this release. |
 | `tracking` | `new` / `recurring` when `--baseline` is used. |
+| `tool_confidence` | Confidence as the tool(s) reported it, kept unchanged. |
+| `confidence_score`, `confidence_factors` | Phase 2 model: tool base (high .8 / medium .55 / low .3), +.15 per extra independent tool (max +.3), −.2 in test code; triage confirmed = 1.0, false positive = 0, probable ≥ .75, informational ≤ .5. `confidence` is re-derived from the score (≥.75 high, ≥.45 medium). |
+| `risk_score`, `priority`, `risk_factors` | Severity weight (10/7/4/2/0.5) × exposure (route file 1.3, entry point 1.15, build/deploy config 1.1, direct dep 1.1, transitive 0.9, test code 0.3) × validation (confirmed 1.2, probable 1.0, unverified 0.8, informational 0.3, false positive 0) × confidence × 10, capped at 100. P0 ≥ 60, P1 ≥ 35, P2 ≥ 15, else P3. |
+| `code_context` | Up to ±2 lines around the first location, redacted. Never populated for secrets. |
+| `in_test_code` | Path looks like test code (`tests/`, `test_*.py`, `*.test.ts`, …). |
 
 `summary.release_blockers` lists critical/high findings that are `confirmed` or `probable`.
 

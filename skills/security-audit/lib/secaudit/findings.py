@@ -69,6 +69,14 @@ class Finding:
     verification: str | None = None
     remediation_status: str | None = None
     tracking: str | None = None    # new | recurring (vs. baseline)
+    code_context: list[dict] | None = None   # [{line, text}] around the first location (redacted)
+    in_test_code: bool = False
+    tool_confidence: str | None = None       # as reported by the tool(s), before the Phase 2 model
+    confidence_score: float | None = None
+    confidence_factors: list[str] = field(default_factory=list)
+    risk_score: float | None = None
+    priority: str | None = None              # P0..P3
+    risk_factors: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -76,6 +84,8 @@ class Finding:
     @classmethod
     def from_dict(cls, d: dict) -> "Finding":
         d = dict(d)
+        known = set(cls.__dataclass_fields__)
+        d = {k: v for k, v in d.items() if k in known}
         d["locations"] = [Location(**x) for x in d.get("locations", [])]
         d["evidence"] = [Evidence(**x) for x in d.get("evidence", [])]
         return cls(**d)
@@ -128,11 +138,10 @@ def _merge_into(a: Finding, b: Finding) -> None:
             a.references.append(r)
     if SEV_RANK[b.severity] < SEV_RANK[a.severity]:
         a.severity, a.severity_source = b.severity, b.severity_source
-    # Independent tools agreeing on the same location raises confidence one step.
-    if len(a.tools) > 1 and a.confidence == "low":
-        a.confidence = "medium"
-    elif len(a.tools) > 1 and a.confidence == "medium":
-        a.confidence = "high"
+    # Keep the stronger tool-reported confidence; agreement is scored in prioritize.py.
+    order = {"high": 0, "medium": 1, "low": 2}
+    if order.get(b.confidence, 1) < order.get(a.confidence, 1):
+        a.confidence = b.confidence
     if b.package and a.package:
         ids = set(a.package.get("advisory_ids", [])) | set(b.package.get("advisory_ids", []))
         a.package["advisory_ids"] = sorted(ids)

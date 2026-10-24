@@ -92,6 +92,10 @@ def score(report: dict, marks: dict, target: Path) -> dict:
     pk_found = {(f["package"]["ecosystem"], f["package"]["name"].lower()) for f in deps}
     expected_pk = {(e, n) for e, names in exp["vulnerable_packages"].items() for n in names}
     secrets_found = [f for f in report["findings"] if f["kind"] == "secret"]
+    seed_risk = [f["risk_score"] for f in code if (f["locations"][0]["path"], f["locations"][0]["start_line"]) in seed_lines | cfg_lines
+                 and f.get("risk_score") is not None]
+    decoy_risk = [f["risk_score"] for f in code if (f["locations"][0]["path"], f["locations"][0]["start_line"]) in decoy_lines
+                  and f.get("risk_score") is not None]
     checks = {c["check_id"]: c["status"] for c in report["checks"]}
     confirmed_without_triage = [f["id"] for f in report["findings"]
                                 if f["validation"] == "confirmed" and not f.get("validation_rationale")]
@@ -112,6 +116,8 @@ def score(report: dict, marks: dict, target: Path) -> dict:
         "dependency_packages_missed": sorted(f"{e}:{n}" for e, n in expected_pk - pk_found),
         "secrets_found": len(secrets_found), "secrets_injected": len(exp["injected_secrets"]),
         "confirmed_without_triage": confirmed_without_triage,
+        "mean_risk_seeded": round(sum(seed_risk) / len(seed_risk), 1) if seed_risk else None,
+        "mean_risk_decoys": round(sum(decoy_risk) / len(decoy_risk), 1) if decoy_risk else None,
         "check_status": checks,
     }
 
@@ -135,4 +141,7 @@ def run(network: bool) -> dict:
 
 
 if __name__ == "__main__":
-    print(json.dumps(run("--network" in sys.argv), indent=2))
+    out = json.dumps(run("--network" in sys.argv), indent=2)
+    if "--output" in sys.argv:
+        Path(sys.argv[sys.argv.index("--output") + 1]).write_text(out)
+    print(out)

@@ -58,6 +58,8 @@ def cmd_triage(a):
     triage = json.loads(Path(a.triage_file).read_text())
     target = Path(state["scope"]["target"])
     findings, log = apply(findings, triage, target)
+    from .prioritize import enrich
+    findings = enrich(findings, json.loads((run / "inventory.json").read_text()), target)
     state["findings"] = [f.to_dict() for f in findings]
     state["triage_log"] = state.get("triage_log", []) + log
     for c in state["checks"]:

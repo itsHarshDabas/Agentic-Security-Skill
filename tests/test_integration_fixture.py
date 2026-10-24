@@ -64,3 +64,13 @@ def test_dependency_checks_match_permission(bench):
     else:
         assert checks["pip-audit"] == "SKIPPED_NOT_PERMITTED"
         assert "grant `network`" in (bench["store"].path / "report.md").read_text()
+
+
+def test_findings_are_prioritized_with_evidence(bench):
+    rep = bench["report"]
+    code = [f for f in rep["findings"] if f["kind"] == "code"]
+    assert all(f["risk_score"] is not None and f["priority"] and f["confidence_factors"] for f in rep["findings"])
+    assert all(f["code_context"] for f in code)
+    assert "P0" in rep["summary"]["by_priority"] or "P1" in rep["summary"]["by_priority"]
+    md = (bench["store"].path / "report.md").read_text()
+    assert "## Prioritized remediation queue" in md

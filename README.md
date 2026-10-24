@@ -18,7 +18,7 @@ works from any shell or agent.
 |---|---|---|
 | 0 | Platform validation, architecture, threat model ([docs/DESIGN.md](docs/DESIGN.md)) | Implemented |
 | 1 | Discovery, SAST, SCA, secrets, normalization, MD/JSON reports, scope gate | Implemented, tested |
-| 2 | Cross-tool dedup, confidence, triage workflow, seeded benchmark | Partly implemented (dedup, triage, benchmark); evidence snippets and confidence model are basic |
+| 2 | Cross-tool dedup, evidence context, confidence model, risk prioritization, triage workflow, seeded benchmark | Implemented, tested |
 | 3 | Isolated remediation, regression tests, approval gates | Designed (manual procedure in `references/remediation.md`), not implemented |
 | 4 | Automated verification, regression detection | Partly: `--baseline` tracks new/recurring/no-longer-reported findings; no fix verification yet |
 | 5 | DAST/API testing (ZAP) on approved targets | Planned |
@@ -114,6 +114,7 @@ Latest run (2026-10-24, this sandbox, network allowed for PyPI/npm, OSV.dev bloc
 | Decoys flagged by scanners | 3/4 (fixed-argv subprocess, md5 ETag, random jitter) |
 | Findings confirmed without triage | 0 |
 | Contextual seed recall | not measured for a live agent (see below) |
+| Mean risk score, seeded vs decoy lines | 51.1 vs 30.5 |
 | Scan duration | ~26 s |
 
 **How to read this.** The bundled Semgrep rules were written alongside this fixture, so
@@ -122,7 +123,8 @@ recall on unseen code, which will be much lower with this small rule pack. The d
 results are the point: scanners flag safe code, and the skill keeps those as
 `unverified` until triage marks them. Contextual findings are produced by the agent; the
 tests exercise the triage plumbing with a fixed triage file, which is not a measurement of
-agent accuracy. Reproduce with `python tests/benchmark.py [--network]`.
+agent accuracy. Reproduce with `python tests/benchmark.py [--network] [--output file.json]`; methodology in
+[docs/BENCHMARK.md](docs/BENCHMARK.md).
 
 ## Tests
 

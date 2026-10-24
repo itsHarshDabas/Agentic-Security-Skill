@@ -15,6 +15,7 @@ from .discovery import discover
 from .errors import ScopeError
 from .evidence import RunStore
 from .findings import Finding, merge
+from .prioritize import enrich
 from .redact import redact_obj
 from .scope import Scope
 
@@ -91,6 +92,7 @@ def scan(scope: Scope, out_base: Path | None, only: set[str] | None = None, time
     inventory = discover(scope)
     store.write_json("inventory.json", inventory)
     checks, findings = plan_and_run(scope, store, inventory, only, timeout, semgrep_configs or [])
+    findings = enrich(findings, inventory, scope.target)
     resolved = []
     if baseline:
         prev = json.loads(Path(baseline).read_text())
