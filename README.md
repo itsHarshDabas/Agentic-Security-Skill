@@ -19,10 +19,10 @@ works from any shell or agent.
 | 0 | Platform validation, architecture, threat model ([docs/DESIGN.md](docs/DESIGN.md)) | Implemented |
 | 1 | Discovery, SAST, SCA, secrets, normalization, MD/JSON reports, scope gate | Implemented, tested |
 | 2 | Cross-tool dedup, evidence context, confidence model, risk prioritization, triage workflow, seeded benchmark | Implemented, tested |
-| 3 | Isolated remediation, regression tests, approval gates | Designed (manual procedure in `references/remediation.md`), not implemented |
-| 4 | Automated verification, regression detection | Partly: `--baseline` tracks new/recurring/no-longer-reported findings; no fix verification yet |
-| 5 | DAST/API testing (ZAP) on approved targets | Planned |
-| 6 | More ecosystems, Trivy, fuzzing, history scanning | Planned |
+| 3 | Isolated remediation (git worktree, hardened git), patch gates, red/green regression tests, approval gates | Implemented, tested |
+| 4 | Automated verification: re-scan of the fixed tree, red/green evidence, final statuses, before/after, regression detection | Implemented, tested |
+| 5 | Passive dynamic checks on approved local/staging URLs (headers, cookies, CORS, debug output), optional ZAP baseline | Implemented, tested (ZAP adapter tested with a fake binary only) |
+| 6 | IaC/pipeline scanning (checkov), git-history secret scanning, run-over-run trends | Implemented, tested. Container-image scanning and fuzzing: not implemented |
 
 ## Install
 
@@ -39,6 +39,7 @@ Scanners are installed separately; any that are missing are reported as `UNAVAIL
 
 ```bash
 pip install semgrep==1.182.1 bandit==1.9.4 pip-audit==2.10.1
+pip install checkov==3.3.30   # separate venv recommended; large dependency tree
 go install github.com/zricethezav/gitleaks/v8@v8.30.1
 go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.7.0
 # npm audit uses your existing npm
@@ -59,6 +60,19 @@ $S scan ./my-app                            # read-only, offline
 $S scan ./my-app --scope ~/scopes/my-app.json   # e.g. with network for dependency checks
 $S triage <run-dir> <run-dir>/triage.json   # apply validated triage + contextual findings
 $S scan ./my-app --baseline <old-run>/report.json   # track new / recurring findings
+$S compare old/report.json new/report.json  # diff two runs by stable finding ID
+$S history ~/.local/state/secaudit/runs --target ./my-app   # trend: new / no longer reported / persistent
+
+# Remediation (needs modify_source; execute_project_code to run tests)
+$S fix start <run-dir>                      # isolated worktree + branch, operator tree untouched
+$S fix plan <run-dir> --finding SA-...      # remediation plan with approval flags
+$S fix apply <run-dir> --finding SA-... --patch fix.diff   # or edit the worktree, then `fix record`
+$S fix test <run-dir> --finding SA-... -- python -m pytest -q   # red/green regression check
+$S verify <run-dir> -- python -m pytest -q  # re-scan fixed tree, assign FIXED_VERIFIED/UNRESOLVED/...
+$S fix diff <run-dir>                       # review; `fix commit` only with the commit permission
+
+# Passive dynamic checks (needs dynamic_testing + the URL in targets.urls)
+$S dast <run-dir> --url http://127.0.0.1:8000/ --max-requests 50 [--zap]
 ```
 
 A scope manifest (stored **outside** the target) is the only way to grant permissions:
@@ -75,11 +89,15 @@ See [`references/scope-manifest.md`](skills/security-audit/references/scope-mani
 |---|---|---|---|
 | SAST (Python, JS/TS, Dockerfile, Compose, GitHub Actions) | Semgrep CE + bundled rules | no | `--metrics=off`, `--disable-nosem`, local rules only |
 | SAST (Python) | Bandit | no | `--ignore-nosec` |
-| Secrets (working tree) | Gitleaks | no | `--redact`, `--ignore-gitleaks-allow` |
+| Secrets (working tree) | Gitleaks | no | `--redact`, `--ignore-gitleaks-allow`, explicit default config (target `.gitleaks.toml` ignored) |
+| Secrets (git history, all refs) | Gitleaks `git` mode | no | git code-execution config overridden via env; repos with risky config are `BLOCKED` |
+| IaC / pipelines (Terraform, CloudFormation, K8s, Helm, Dockerfile, GitHub/GitLab CI) | Checkov | no | runs on a copy holding only IaC-shaped files, so target `.checkov.yaml` and external checks are never loaded; inline `checkov:skip` reported anyway |
 | Dependencies (all ecosystems) | OSV-Scanner | yes | |
 | Dependencies (pinned requirements) | pip-audit | yes | `--no-deps --disable-pip`: never installs or resolves packages |
 | Dependencies (npm lockfile) | npm audit | yes | runs on a temp copy of `package.json` + lockfile only, empty npmrc |
 | Contextual review (authz, IDOR, logic) | the agent | no | recorded via `triage`, validated by the engine |
+| Runtime headers, cookies, CORS, debug output | built-in HTTP checker (`dast`) | local target | GET only, pinned IP, request budget; loopback/private addresses unless `external_services` |
+| DAST baseline | OWASP ZAP `zap-baseline.py` (`dast --zap`) | local target | passive scan; `UNAVAILABLE` if ZAP is not installed |
 
 ## Safety controls (enforced in code, covered by tests)
 
@@ -126,26 +144,56 @@ tests exercise the triage plumbing with a fixed triage file, which is not a meas
 agent accuracy. Reproduce with `python tests/benchmark.py [--network] [--output file.json]`; methodology in
 [docs/BENCHMARK.md](docs/BENCHMARK.md).
 
+### Remediation benchmark
+
+`python tests/benchmark.py --remediation` runs four scripted fix scenarios on `fixtures/fixapp`
+(seeded SQL injection) and checks the status the verifier assigns:
+
+| Scenario | Expected | Actual |
+|---|---|---|
+| Correct fix + regression test | FIXED_VERIFIED | FIXED_VERIFIED |
+| Correct fix, no test (`--no-test-reason`) | FIX_APPLIED_UNVERIFIED | FIX_APPLIED_UNVERIFIED |
+| Cosmetic change that leaves the bug | UNRESOLVED | UNRESOLVED |
+| Correct fix that adds an `os.system` call | FIX_APPLIED_UNVERIFIED + regression flagged | same |
+
+Status accuracy 4/4, operator's uncommitted changes preserved in all four, ~8 s per scenario.
+
+### Independent check (Phase 6)
+
+Checkov's rules were not written for this fixture, so they give a small unbiased signal: on
+`fixtures/vulnapp` it reported 4 findings, 3 of which hit seeded config issues (container runs as
+root, workflow `write-all` permissions, workflow script injection), i.e. 3/9 config seeds; it does
+not parse Compose files and missed the Dockerfile `ENV` secret and `curl | sh`. The other finding is
+a hygiene check (no `HEALTHCHECK`). Scanner-detectable recall and precision above are unchanged
+(IaC findings are counted separately).
+These are scripted patches, so this measures the verifier, not an agent's ability to write fixes.
+
 ## Tests
 
 ```bash
-python -m venv .venv && .venv/bin/pip install semgrep==1.182.1 bandit==1.9.4 pip-audit==2.10.1 pytest
+python -m venv .venv && .venv/bin/pip install semgrep==1.182.1 bandit==1.9.4 pip-audit==2.10.1
+pip install checkov==3.3.30   # separate venv recommended; large dependency tree pytest
 SECAUDIT_TOOL_PATH=$PWD/.venv/bin:$HOME/go/bin .venv/bin/python -m pytest -q          # offline
 SECAUDIT_TEST_NETWORK=1 SECAUDIT_TOOL_PATH=... .venv/bin/python -m pytest -q          # + dependency scanners
 ```
 
-54 tests: scope/permission gate, path and symlink handling, subprocess hardening, env
+100 tests: scope/permission gate, path and symlink handling, subprocess hardening, env
 scrubbing, redaction, honest statuses for missing/failed/blocked/timed-out tools, evidence
 tamper detection, triage validation, stable IDs across edits, new-issue detection, no
-writes to the target, no secrets in outputs, and the seeded benchmark. Integration tests
-skip when a scanner is not installed.
+writes to the target, no secrets in outputs, the seeded benchmark, remediation isolation
+and patch gates, verification statuses, and dynamic-check scope enforcement (URL/origin
+match, private-address and metadata-IP refusal, DNS pinning, GET-only, budget, no redirect
+following) against a local test server, checkov target-config isolation and suppression
+reporting, history secrets (deleted secret found, redacted, risky git config blocked) and run trends. Integration tests skip when a scanner is not installed.
 
 ## Known limitations
 
 - OSV-Scanner needs api.osv.dev and api.deps.dev; when they are unreachable it is reported `BLOCKED`.
-- Git history is not scanned for secrets yet.
+- Checkov severities are assigned by the engine (open-source checkov ships none): a short high-impact list, keyword-based "low" for hygiene checks, "medium" otherwise. Compose files are not covered by checkov.
+- History scanning reports the file and commit but not a working-tree line; very large histories can hit the timeout (reported `TIMED_OUT`).
+- No container-image scanning and no fuzzing.
 - pip-audit only audits pinned `requirements*.txt` lines; unpinned lines make the check `PARTIAL`. `pyproject.toml`/`poetry.lock` rely on OSV-Scanner.
-- No container image, IaC (Terraform/K8s) or DAST coverage yet.
+- Dynamic checks are passive only: no injection, authentication, authorization, TLS-configuration or fuzz testing. HTTPS targets need a certificate valid for the hostname. ZAP was not available in the development sandbox (no Docker), so the ZAP adapter is tested only against a fake binary with ZAP's JSON format.
 - Scanners run as your user with rlimits, not in a container.
 
 ## Layout

@@ -79,13 +79,16 @@ def risk(f: Finding, route_files: set[str], entry_points: set[str]) -> tuple[flo
         direct = (f.package or {}).get("direct")
         exposure = 1.1 if direct else 0.9 if direct is False else 1.0
         factors.append(f"exposure x{exposure}: {'direct' if direct else 'transitive' if direct is False else 'unknown'} dependency")
+    elif f.kind == "dynamic":
+        exposure = 1.2
+        factors.append("exposure x1.2: observed on a running target")
     elif path in route_files:
         exposure = 1.3
         factors.append("exposure x1.3: file defines HTTP routes (externally reachable)")
     elif path in entry_points:
         exposure = 1.15
         factors.append("exposure x1.15: application entry point")
-    elif f.kind == "config" and (path.startswith(".github/") or "Dockerfile" in path or "compose" in path):
+    elif f.kind in ("config", "iac") and (path.startswith(".github/") or "Dockerfile" in path or "compose" in path):
         exposure = 1.1
         factors.append("exposure x1.1: build/deploy configuration")
     vf = VALIDATION_FACTOR[f.validation]
@@ -105,7 +108,7 @@ def enrich(findings: list[Finding], inventory: dict, target: Path) -> list[Findi
         f.in_test_code = bool(loc and is_test_path(loc.path))
         if f.tool_confidence is None:
             f.tool_confidence = f.confidence
-        if loc and f.kind in ("code", "config", "contextual") and f.code_context is None:
+        if loc and f.kind in ("code", "config", "iac", "contextual") and f.code_context is None:
             f.code_context = _context(target, loc.path, loc.start_line, loc.end_line)
         f.confidence_score, f.confidence_factors = confidence(f)
         f.confidence = "high" if f.confidence_score >= 0.75 else "medium" if f.confidence_score >= 0.45 else "low"

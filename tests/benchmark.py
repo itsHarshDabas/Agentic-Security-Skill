@@ -13,6 +13,7 @@ import json
 import os
 import re
 import secrets
+import string
 import shutil
 import sys
 import tempfile
@@ -43,7 +44,9 @@ def materialize(dest: Path) -> dict:
     key = "-----BEGIN RSA PRIVATE KEY-----\n" + "\n".join(body[i:i + 64] for i in range(0, len(body), 64)) + \
           "\n-----END RSA PRIVATE KEY-----\n"
     (dest / "deploy_key.pem").write_text(key)
-    token = secrets.token_hex(20)
+    # Mixed-case alphanumerics: a hex token falls under gitleaks' entropy threshold ~2% of the time,
+    # which made the secrets assertion flaky.
+    token = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(40))
     (dest / "settings_local.py").write_text(f'PAYMENTS_API_KEY = "{token}"\n')
     return marks
 
@@ -140,7 +143,67 @@ def run(network: bool) -> dict:
     return result
 
 
+def remediation_benchmark() -> dict:
+    """Four scripted fix scenarios on fixtures/fixapp with known correct outcomes."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from remediation_helpers import SECURITY_TEST, UNITTEST, fix_patch, make_repo, scope, sqli_finding, udiff
+    from secaudit.pipeline import scan
+    from secaudit.remediation import FixSession
+    from secaudit.scope import load_scope
+    from secaudit.verification import verify
+
+    def cosmetic(fix):
+        src = (fix / "store.py").read_text()
+        return udiff("store.py", src, src.replace("def find_user(conn, name):", "def find_user(conn, name):  # ok")) + \
+            udiff("tests/test_security.py", None, SECURITY_TEST)
+
+    def regress(fix):
+        src = (fix / "store.py").read_text()
+        new = src[:src.index("def find_user")] + ('def find_user(conn, name):\n    return conn.execute('
+              '"SELECT id, name FROM users WHERE name = ?", (name,)).fetchall()\n\n\ndef backup(p):\n'
+              '    import os\n    os.system("cp users.db " + p)\n')
+        return udiff("store.py", src, new) + udiff("tests/test_security.py", None, SECURITY_TEST)
+
+    scenarios = [
+        ("effective-fix", lambda fx: fix_patch(fx), {}, True, "FIXED_VERIFIED"),
+        ("fix-without-test", lambda fx: fix_patch(fx, with_test=False), {"no_test_reason": "bench"}, False,
+         "FIX_APPLIED_UNVERIFIED"),
+        ("ineffective-fix", cosmetic, {}, True, "UNRESOLVED"),
+        ("fix-introduces-regression", regress, {}, True, "FIX_APPLIED_UNVERIFIED"),
+    ]
+    rows = []
+    for name, mk, kw, run_test, expected in scenarios:
+        work = Path(tempfile.mkdtemp(prefix=f"secaudit-rem-{name}-"))
+        repo = make_repo(work)
+        t0 = time.monotonic()
+        store = scan(load_scope(repo, scope(work, modify_source=True, execute_project_code=True)), work / "runs",
+                     only={"semgrep", "bandit"})
+        f = sqli_finding(json.loads((store.path / "report.json").read_text()))
+        fs = FixSession.start(store.path)
+        patch = work / "p.diff"
+        patch.write_text(mk(fs.fix))
+        fs.apply_patch(f["id"], patch, **kw)
+        if run_test:
+            fs.test(f["id"], UNITTEST)
+        v = verify(store.path)
+        r = v["results"][0]
+        rows.append({"scenario": name, "expected": expected, "actual": r["status"], "correct": r["status"] == expected,
+                     "regression_detected": bool(r.get("introduced_findings")),
+                     "operator_tree_unchanged": v["summary"]["operator_tree_unchanged"],
+                     "duration_s": round(time.monotonic() - t0, 1)})
+    return {
+        "scenarios": rows,
+        "status_accuracy": round(sum(r["correct"] for r in rows) / len(rows), 3),
+        "remediation_success_rate_effective_fix": 1.0 if rows[0]["actual"] == "FIXED_VERIFIED" else 0.0,
+        "regression_detected": rows[3]["regression_detected"],
+        "operator_changes_preserved": all(r["operator_tree_unchanged"] for r in rows),
+    }
+
+
 if __name__ == "__main__":
+    if "--remediation" in sys.argv:
+        print(json.dumps(remediation_benchmark(), indent=2))
+        sys.exit(0)
     out = json.dumps(run("--network" in sys.argv), indent=2)
     if "--output" in sys.argv:
         Path(sys.argv[sys.argv.index("--output") + 1]).write_text(out)

@@ -21,6 +21,8 @@ jobs:
         run: |
           python -m venv .venv
           .venv/bin/pip install semgrep==1.182.1 bandit==1.9.4 pip-audit==2.10.1 pytest==9.1.1
+          python -m venv .tools/checkov && .tools/checkov/bin/pip install checkov==3.3.30
+          mkdir -p .tools/bin && ln -sf "$PWD/.tools/checkov/bin/checkov" .tools/bin/checkov
           GOBIN=$PWD/.tools/bin go install github.com/zricethezav/gitleaks/v8@v8.30.1
           GOBIN=$PWD/.tools/bin go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.7.0
       - name: Tests (offline)
@@ -29,3 +31,5 @@ jobs:
         run: SECAUDIT_TEST_NETWORK=1 SECAUDIT_TOOL_PATH=$PWD/.tools/bin:$PWD/.venv/bin .venv/bin/python -m pytest -q
       - name: Benchmark
         run: SECAUDIT_TOOL_PATH=$PWD/.tools/bin:$PWD/.venv/bin .venv/bin/python tests/benchmark.py --network
+      - name: Remediation benchmark
+        run: SECAUDIT_TOOL_PATH=$PWD/.tools/bin:$PWD/.venv/bin .venv/bin/python tests/benchmark.py --remediation

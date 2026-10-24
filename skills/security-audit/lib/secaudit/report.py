@@ -16,8 +16,10 @@ LIMITATIONS = [
     "The bundled Semgrep rule pack is small and targets common Python/JS/Docker/CI issues; coverage is far below commercial rule sets.",
     "Dependency results reflect advisory databases at scan time and do not assess whether vulnerable code is reachable.",
     "Business-logic and authorization flaws are only covered by the agent's targeted review, which is non-deterministic and not exhaustive.",
-    "No dynamic testing was performed in this release; runtime configuration, headers, CORS and TLS were not tested.",
 ]
+NO_DAST = "No dynamic testing was performed for this run; runtime configuration, headers, cookies and CORS were not tested."
+PASSIVE_DAST = ("Dynamic checks were passive (GET only: headers, cookies, CORS, debug output) on the listed URLs; "
+                "no injection, authentication, authorization or TLS configuration testing was performed.")
 
 
 def summarize(findings: list[dict], checks: list[dict]) -> dict:
@@ -49,10 +51,12 @@ def render(store: RunStore) -> None:
         "inventory": inventory,
         "tools": [{"tool": c["tool"], "version": c["tool_version"]} for c in checks if c.get("tool_version")],
         "checks": checks,
-        "coverage_limitations": LIMITATIONS,
+        "coverage_limitations": LIMITATIONS + [PASSIVE_DAST if any(
+            c["category"] == "dast" and c["status"] in ("COMPLETED", "PARTIAL") for c in checks) else NO_DAST],
         "findings": findings,
         "triage_log": state.get("triage_log", []),
-        "remediation": {"status": "not performed", "note": "Remediation is Phase 3; no source files were modified."},
+        "remediation": state.get("verification") or {"status": "not performed",
+                                                     "note": "No fix session was verified for this run; no source files were modified."},
         "evidence_integrity": {"manifest": "evidence/manifest.json", "mismatched_files": tampered},
     })
     store.write_json("report.json", report)
@@ -172,8 +176,34 @@ def _markdown(r: dict) -> str:
         w("A finding that is no longer reported is not proof it was fixed; verification is Phase 4.\n")
 
     w("## Remediation and verification\n")
-    w("Not performed in this run (Phase 3/4). No fixes were applied, so there is no before/after comparison "
-      "and no finding has status FIXED_VERIFIED.\n")
+    v = r["remediation"]
+    if v.get("results") is None:
+        w("Not performed for this run. No fixes were applied, so there is no before/after comparison "
+          "and no finding has status FIXED_VERIFIED.\n")
+    else:
+        sm = v["summary"]
+        w(f"Fixes on branch `{v['fix_branch']}` (not pushed). Re-scan: {', '.join(f'{k} {s}' for k, s in v['rescan_checks'].items() if s in ('COMPLETED', 'PARTIAL', 'FAILED', 'BLOCKED', 'TIMED_OUT'))}.\n")
+        w("| Finding | Severity | Status | Evidence |")
+        w("|---|---|---|---|")
+        for x in v["results"]:
+            w(f"| `{x['finding']}` {_esc(x['title'][:50])} | {x['severity']} | **{x['status']}** | {_esc('; '.join(x['evidence']))} |")
+        w("")
+        w(f"- Before: {sm['findings_before']} active findings ({', '.join(f'{n} {k}' for k, n in sm['by_severity_before'].items() if n)})")
+        w(f"- After (re-scan of the fixed tree): {sm['findings_after']} ({', '.join(f'{n} {k}' for k, n in sm['by_severity_after'].items() if n) or 'none'})")
+        w(f"- Remediation success rate {sm['remediation_success_rate']}, verification coverage {sm['verification_coverage']}, "
+          f"regression rate {sm['regression_rate']}")
+        if sm["suite_passed"] is not None:
+            w(f"- Project test suite on the fixed tree: {'passed' if sm['suite_passed'] else '**FAILED**'}")
+        w(f"- Operator's uncommitted changes unchanged: {'yes' if sm['operator_tree_unchanged'] else '**NO**'}")
+        if v["introduced"]:
+            w(f"\n**New findings introduced by the fixes ({len(v['introduced'])}):**\n")
+            for x in v["introduced"]:
+                loc = x["location"] or {}
+                w(f"- `{x['id']}` {_esc(x['title'])} ({x['severity']}) at `{loc.get('path')}:{loc.get('start_line') or ''}`")
+        w("")
+        for lim in v["limitations"]:
+            w(f"- {lim}")
+        w("")
     w("## Residual risk and next actions\n")
     w("- Triage every high/critical `unverified` finding: confirm with code inspection or mark false positive with a rationale.")
     w("- Review the highest-risk files above for authorization and business-logic flaws scanners cannot see.")

@@ -77,8 +77,11 @@ Assets: the operator's machine, credentials in the environment, the target's sou
 | SCA (all ecosystems) | OSV-Scanner | 2.7.0 | yes (api.osv.dev, deps.dev) | Implemented; **Blocked** in this sandbox (egress denied) |
 | SCA (Python) | pip-audit | 2.10.1 | yes (pypi.org) | Implemented |
 | SCA (Node) | npm audit | npm 10.9.4 | yes (registry.npmjs.org) | Implemented |
-| Container/IaC | Trivy | not installed | — | Planned (Phase 6); Docker/Compose/Actions covered by Semgrep rules for now |
-| DAST | OWASP ZAP | not installed | — | Planned (Phase 5) |
+| IaC / pipelines | Checkov | 3.3.30 | no (`--skip-download`, no API key) | Implemented |
+| Secrets (history) | Gitleaks `git` mode | 8.30.1 | no | Implemented |
+| Container images | Trivy | not installed | — | Not implemented (needs a container runtime) |
+| DAST (passive) | built-in `dast.py` (stdlib http.client) | — | local target only | Implemented |
+| DAST baseline | OWASP ZAP `zap-baseline.py` | not installed (no Docker here) | local target | Implemented; tested with a fake binary only |
 
 The Semgrep public registry (semgrep.dev) is not reachable from this sandbox, and the community `semgrep-rules` repo has a license that restricts redistribution, so the skill ships its own small rule pack and accepts extra `--semgrep-config` paths the operator supplies.
 
@@ -96,10 +99,10 @@ See `skills/security-audit/references/finding-schema.md`. Key points:
 | 0 | Platform, architecture, threat model | This document | Implemented |
 | 1 | Discovery, SAST, SCA, secrets, normalization, MD/JSON reports, scope gate | AC 1,2,3,4,6,7,13,14,15 on the fixture; benchmark recall reported | Implemented + tested (see README) |
 | 2 | Dedup tuning, confidence, evidence snippets, risk prioritization, triage workflow, benchmark metrics | AC 5,6; precision/recall/FP rate tracked per run | Implemented + tested |
-| 3 | Remediation: worktree isolation, regression tests, diff review, approval gates | AC 8,9,12 | Planned |
-| 4 | Verification: re-scan, diff findings, regression detection | AC 10,11 | Planned |
-| 5 | DAST/API testing against approved local targets (ZAP), rate limits | Scope enforcement tests on URLs | Planned |
-| 6 | More ecosystems, Trivy, fuzzing, history | per adapter | Planned |
+| 3 | Remediation: worktree isolation, regression tests, diff review, approval gates | AC 8,9,12 | Implemented + tested |
+| 4 | Verification: re-scan, diff findings, regression detection | AC 10,11 | Implemented + tested |
+| 5 | Passive DAST against approved local targets, rate limits, optional ZAP baseline | Scope enforcement tests on URLs | Implemented + tested |
+| 6 | IaC (checkov), git-history secrets, run trends | per adapter tests | Implemented + tested; container images and fuzzing not implemented |
 
 ## 7. Risks and missing capabilities
 
@@ -109,3 +112,36 @@ See `skills/security-audit/references/finding-schema.md`. Key points:
 4. **pip-audit with unpinned requirements** cannot audit ranges without resolving (which would run package code); unpinned entries are reported as skipped.
 5. **Tool supply chain.** Tools are installed by the operator; the engine records the version it ran but does not verify binary signatures (Planned).
 6. **No sandbox around scanners.** rlimits and env scrubbing are applied, but scanners run as the operator's user. Containerized execution is Planned.
+
+## 8. Phase 3 design notes (remediation)
+
+- Isolation: `git worktree add` on a new `secaudit/fix-<run>` branch from HEAD, plus a detached `base` worktree for red/green checks; both live in the run directory outside the repository. The operator's working tree, index and HEAD are not touched; a snapshot of their uncommitted changes (status + content hashes) is compared after every step.
+- Git hardening (`safe_git.py`): `-c` overrides for fsmonitor, hooks, pager, editors, ssh, credential helper, protocol.allow=never, external diff; no system/global config; repositories whose local config sets filter/textconv/merge drivers, include paths or similar are refused.
+- Checkpoints are tree objects (`git add -A && git write-tree` in the fix worktree), so per-finding diffs are exact and no commits are created until `fix commit`.
+- Gate (`patchgate.py`) runs on every recorded diff; violations roll the worktree back to the last accepted tree.
+- Red/green: base worktree is reset to the pre-fix tree, the fix's test files are overlaid, the command must fail; the same command must pass in the fix worktree.
+- Residual risk: running project tests executes repository code with the operator's privileges (rlimits, scrubbed env, no network proxy, but no container). That is why it needs a separate `execute_project_code` permission.
+
+## 9. Phase 4 design notes (verification)
+
+- `verify` re-runs the scanners that completed in the original scan against the fix worktree (same scope, same excludes, permissions copied from the verified manifest) with the original report as baseline.
+- A finding counts as still present if its stable ID reappears, or if the same file has a hit from the same tool rule in the same CWE family (conservative: a reformatted but unfixed line is not "gone").
+- Status assignment is a pure function of recorded evidence (`_status`), unit-tested separately; new findings in files a fix touched downgrade FIXED_VERIFIED to FIX_APPLIED_UNVERIFIED and are reported as regressions.
+- Optional suite command runs on the fixed tree; its result is reported separately from per-finding status.
+
+## 10. Phase 5 design notes (dynamic checks)
+
+- Deliberately passive. The skill does not ship injection, authentication-bypass or fuzzing payloads; those need a separately authorized engagement and purpose-built tools.
+- Authorization (`dast.authorize`): `dynamic_testing` permission; exact (scheme, host, port) match against `targets.urls`; no credentials in URLs; the host is resolved once and must be loopback/private unless `external_services` is granted; link-local, multicast, reserved and unspecified addresses are always refused. Requests are sent to the pinned IP with the original `Host` header (no DNS rebinding). `http.client` ignores proxy environment variables.
+- Traffic: GET only, plus one GET with `Origin: https://secaudit-origin-check.invalid` for CORS. Paths are the given URL and parameterless GET routes from discovery; `standard` intensity adds 11 well-known paths. Redirects are never followed. Budget (default 50, max 500 requests), minimum interval (default 0.2 s, min 0.05 s), 10 s timeout, 512 KB body cap.
+- Evidence: the request log (method, path, status, headers, timing; bodies are not stored) is saved to the run's evidence with sha256. Findings are `kind: dynamic`, `validation: confirmed` because they are direct observations of the response.
+- The scan records a `dast` check as `PENDING`; `secaudit dast` replaces it with `dast-http` (and `dast-zap`) results and the report's limitations change accordingly.
+- Residual risk: even GET requests can have side effects in badly designed applications; that is why only discovered parameterless GET routes are requested, and why the target must be a local/staging instance the operator names.
+
+## 11. Phase 6 design notes
+
+- **Checkov.** Checkov loads `.checkov.yaml` from the scanned directory even when `--config-file` is passed (verified with 3.3.30), and that file can skip checks or point `external-checks-dir` at Python in the repository, which checkov would import. So checkov never sees the target: the adapter copies only regular, IaC-shaped files (`*.tf`, `*.y(a)ml`, `*.json`, `Dockerfile*`, …, max 2 MB each, no symlinks, scope excludes applied, `.checkov*` dropped) into a temp mirror and scans that. `--quiet` is not used because it hides skipped checks; inline `checkov:skip` suppressions are reported as findings with the suppression noted. Findings are `kind: iac` (resource-level; not merged with line-level findings). Severities come from an engine-side map (`severity_source: secaudit-map`).
+- **Gitleaks config.** Without `--config`, gitleaks loads `.gitleaks.toml` from the scan root; a target could allowlist its own secrets (verified: an allowlist of `.*` hid a real match). Both gitleaks checks now pass a temp config containing only `[extend] useDefault = true`. This also hardens the Phase 1 working-tree scan.
+- **History secrets.** `gitleaks git` runs `git log -p` itself. The adapter refuses repositories whose local config sets code-executing keys (`safe_git.require_safe`, status `BLOCKED`), and passes `safe_git.OVERRIDES` to every git child through `GIT_CONFIG_COUNT/KEY/VALUE`, plus `--no-textconv --no-ext-diff` in the log options and `GIT_CONFIG_NOSYSTEM`/`GIT_CONFIG_GLOBAL=/dev/null`. Findings carry the commit and file, never the secret.
+- **History/trends.** `secaudit history` reads existing `report.json` files only; it reports per-run counts, new and no-longer-reported IDs, checks that did not complete, and findings open since an earlier run. It warns that "no longer reported" is not a fix.
+- **Not implemented:** container-image scanning (needs a runtime), fuzzing (would execute project code under generated inputs; would need its own permission and sandbox), Go/Java SAST beyond Semgrep's bundled rules.

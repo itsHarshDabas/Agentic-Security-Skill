@@ -32,7 +32,7 @@ MANIFESTS = {
     "go.mod": "go", "go.sum": "go", "Gemfile.lock": "rubygems", "composer.lock": "packagist",
     "Cargo.lock": "cargo", "pom.xml": "maven", "build.gradle": "maven",
 }
-TOOL_CONFIGS = {".gitleaks.toml", ".gitleaksignore", ".semgrepignore", ".semgrep.yml", ".semgrep",
+TOOL_CONFIGS = {".checkov.yaml", ".checkov.yml", ".gitleaks.toml", ".gitleaksignore", ".semgrepignore", ".semgrep.yml", ".semgrep",
                 ".bandit", "bandit.yaml", "bandit.yml", ".npmrc", "pip.conf", ".osv-scanner.toml",
                 "osv-scanner.toml", ".trivyignore"}
 
