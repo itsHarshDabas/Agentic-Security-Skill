@@ -33,8 +33,9 @@ auto-discovers one, so repository content cannot grant itself permissions.
 | `permissions.modify_source` | Allows `fix start`: creates a worktree and a `secaudit/fix-*` branch in the repository and records gated fixes there. The operator's working tree is not modified. |
 | `permissions.execute_project_code` | Allows `fix test` / `verify` to run the project's own test commands (argv, no shell, network-off env, timeout). This executes repository code; grant only for code you trust enough to run. |
 | `permissions.commit` | Allows `fix commit` on the session branch. Nothing is ever pushed. |
-| `permissions.dynamic_testing`, `targets.urls` | Reserved for Phase 5 DAST; nothing uses them yet. |
-| `intensity` | `passive` or `standard`; reserved for dynamic testing. |
+| `permissions.dynamic_testing`, `targets.urls` | Allows `secaudit dast` to send GET requests to a running target. The URL's scheme, host and port must exactly match an entry in `targets.urls`. The host must resolve to a loopback or private address; it is resolved once and every request goes to that IP. |
+| `permissions.external_services` | Also allows dynamic testing of hosts that resolve to public addresses. Link-local (cloud metadata), multicast and reserved addresses are always refused. Never grant this for production systems. |
+| `intensity` | `passive` (default): `dast` requests only the given URL and parameterless GET routes found by discovery. `standard`: also requests a fixed list of 11 well-known debug/admin paths (`/console`, `/.env`, `/actuator/env`, …). Neither sends payloads or state-changing methods. |
 
 Unknown keys, unknown permissions and non-boolean values are rejected. The report
 records the manifest path and its sha256 so scope changes are auditable.

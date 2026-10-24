@@ -79,6 +79,9 @@ def risk(f: Finding, route_files: set[str], entry_points: set[str]) -> tuple[flo
         direct = (f.package or {}).get("direct")
         exposure = 1.1 if direct else 0.9 if direct is False else 1.0
         factors.append(f"exposure x{exposure}: {'direct' if direct else 'transitive' if direct is False else 'unknown'} dependency")
+    elif f.kind == "dynamic":
+        exposure = 1.2
+        factors.append("exposure x1.2: observed on a running target")
     elif path in route_files:
         exposure = 1.3
         factors.append("exposure x1.3: file defines HTTP routes (externally reachable)")

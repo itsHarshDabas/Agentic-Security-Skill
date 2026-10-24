@@ -118,6 +118,13 @@ def cmd_verify(a):
     return 0
 
 
+def cmd_dast(a):
+    from .dast import record
+    print(json.dumps(record(Path(a.run_dir), a.url, max_requests=a.max_requests, min_interval=a.min_interval,
+                            zap=a.zap, timeout=a.timeout), indent=2))
+    return 0
+
+
 def cmd_compare(a):
     from .verification import compare
     print(json.dumps(compare(Path(a.old), Path(a.new)), indent=2))
@@ -189,6 +196,14 @@ def main(argv=None):
     vp.add_argument("run_dir")
     vp.add_argument("--timeout", type=int, default=900)
     vp.set_defaults(fn=cmd_verify)
+    dp = sub.add_parser("dast", help="Phase 5: passive HTTP checks on an approved URL (needs dynamic_testing)")
+    dp.add_argument("run_dir")
+    dp.add_argument("--url", required=True, help="must match an origin in the manifest's targets.urls")
+    dp.add_argument("--max-requests", type=int, default=50)
+    dp.add_argument("--min-interval", type=float, default=0.2, help="seconds between requests")
+    dp.add_argument("--zap", action="store_true", help="also run OWASP ZAP baseline (passive) if installed")
+    dp.add_argument("--timeout", type=int, default=900)
+    dp.set_defaults(fn=cmd_dast)
     cp = sub.add_parser("compare", help="diff two report.json files by stable finding ID")
     cp.add_argument("old")
     cp.add_argument("new")

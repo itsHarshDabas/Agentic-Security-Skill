@@ -109,5 +109,5 @@ def test_evidence_tamper_is_detected(project, tmp_path, only_fakes):
 
 def test_unimplemented_checks_are_listed(project, tmp_path, only_fakes):
     c = _checks(scan(load_scope(project, None), tmp_path / "runs"))
-    assert c["dast"]["status"] == "NOT_IMPLEMENTED"
+    assert c["dast"]["status"] == "PENDING"
     assert c["agent-review"]["status"] == "PENDING"

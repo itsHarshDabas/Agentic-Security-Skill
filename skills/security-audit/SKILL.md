@@ -6,7 +6,7 @@ compatibility: Requires Python 3.10+ and shell access. Scanners are optional ind
 allowed-tools: Bash(${CLAUDE_SKILL_DIR}/scripts/secaudit *) Read Grep Glob
 metadata:
   version: "0.1.0"
-  phase: "1 (read-only auditor)"
+  phase: "5 (passive dynamic checks)"
 ---
 
 # Security audit
@@ -58,6 +58,13 @@ Lead with confirmed/probable high and critical issues (the `release_blockers`), 
 ### 6. Remediation (only on request)
 Follow `references/remediation.md`: `fix start` → `fix plan` → edit in the fix worktree → `fix record` (or `fix apply --patch`) → `fix test` (red/green) → `fix diff` with the operator. If a gate returns `APPROVAL_REQUIRED`, show the diff and reasons and wait for an explicit yes before re-running with `--approve`. Never try to get around a `REJECTED` gate (no suppressions, no scanner-config edits, no removed tests). Commit only if the manifest grants `commit` and the operator asked; never push.
 
+### 7. Dynamic checks (only on request)
+Only against a running local or staging instance the operator names, never production. Needs `dynamic_testing` and the URL's origin in `targets.urls` of the manifest.
+```
+${CLAUDE_SKILL_DIR}/scripts/secaudit dast <run> --url http://127.0.0.1:8000/ [--max-requests 50] [--min-interval 0.2] [--zap]
+```
+This is passive: GET requests only (plus one request with a harmless `Origin` header for CORS), no payloads, redirects not followed, request budget enforced. It checks security headers, cookie flags, CORS, version banners and debug/stack-trace output. Do not use other tools (curl, scripts) to go beyond it; active testing (injection, auth bypass, fuzzing) is out of scope for this skill.
+
 ## Re-scans and tracking
 Pass `--baseline <old report.json>` to label findings `new` or `recurring` and list ones no longer reported. "No longer reported" is not proof of a fix.
 
@@ -66,4 +73,4 @@ Pass `--baseline <old report.json>` to label findings `new` or `recurring` and l
 - `references/triage-guide.md`: triage JSON format and decision criteria
 - `references/review-checklist.md`: contextual review checklist (Python/Flask/FastAPI, Node/Express, config)
 - `references/finding-schema.md`: report and finding fields, statuses
-- `references/remediation.md`: manual remediation and verification procedure (automation planned)
+- `references/remediation.md`: remediation and verification procedure and final statuses
