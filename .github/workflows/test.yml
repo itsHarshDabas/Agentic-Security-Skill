@@ -29,3 +29,5 @@ jobs:
         run: SECAUDIT_TEST_NETWORK=1 SECAUDIT_TOOL_PATH=$PWD/.tools/bin:$PWD/.venv/bin .venv/bin/python -m pytest -q
       - name: Benchmark
         run: SECAUDIT_TOOL_PATH=$PWD/.tools/bin:$PWD/.venv/bin .venv/bin/python tests/benchmark.py --network
+      - name: Remediation benchmark
+        run: SECAUDIT_TOOL_PATH=$PWD/.tools/bin:$PWD/.venv/bin .venv/bin/python tests/benchmark.py --remediation

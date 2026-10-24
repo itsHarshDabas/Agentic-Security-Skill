@@ -109,6 +109,21 @@ def cmd_fix(a):
     return 0
 
 
+def cmd_verify(a):
+    from .verification import verify
+    v = verify(Path(a.run_dir), suite_cmd=a.suite_cmd or None, timeout=a.timeout)
+    print(json.dumps({"summary": v["summary"], "results": [{k: r[k] for k in ("finding", "status", "evidence")}
+                                                            for r in v["results"]],
+                      "report_md": str(Path(a.run_dir) / "report.md")}, indent=2))
+    return 0
+
+
+def cmd_compare(a):
+    from .verification import compare
+    print(json.dumps(compare(Path(a.old), Path(a.new)), indent=2))
+    return 0
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="secaudit", description="Evidence-driven, scope-enforced security audit")
     p.add_argument("--version", action="version", version=__version__)
@@ -161,7 +176,6 @@ def main(argv=None):
     x.add_argument("run_dir")
     x.add_argument("--finding", required=True)
     x.add_argument("--timeout", type=int, default=900)
-    x.add_argument("test_cmd", nargs=argparse.REMAINDER, help="test command after --, run without a shell")
     x = fsub.add_parser("diff", help="show the full fix diff and gate results")
     x.add_argument("run_dir")
     x = fsub.add_parser("commit", help="commit recorded fixes on the session branch (needs commit); never pushes")
@@ -171,9 +185,24 @@ def main(argv=None):
     x.add_argument("run_dir")
     fp.set_defaults(fn=cmd_fix)
 
+    vp = sub.add_parser("verify", help="Phase 4: re-scan the fix worktree and assign verified statuses")
+    vp.add_argument("run_dir")
+    vp.add_argument("--timeout", type=int, default=900)
+    vp.set_defaults(fn=cmd_verify)
+    cp = sub.add_parser("compare", help="diff two report.json files by stable finding ID")
+    cp.add_argument("old")
+    cp.add_argument("new")
+    cp.set_defaults(fn=cmd_compare)
+
+    argv = list(sys.argv[1:] if argv is None else argv)
+    extra: list[str] = []
+    if "--" in argv:  # everything after `--` is a command to run (argv, no shell)
+        i = argv.index("--")
+        argv, extra = argv[:i], argv[i + 1:]
     a = p.parse_args(argv)
-    if getattr(a, "test_cmd", None) and a.test_cmd[:1] == ["--"]:
-        a.test_cmd = a.test_cmd[1:]
+    a.test_cmd = a.suite_cmd = extra
+    if a.fn is cmd_fix and a.fix_cmd == "test" and not extra:
+        p.error("fix test needs a command after --")
     try:
         return a.fn(a)
     except (ScopeError, TriageError) as e:

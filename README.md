@@ -20,7 +20,7 @@ works from any shell or agent.
 | 1 | Discovery, SAST, SCA, secrets, normalization, MD/JSON reports, scope gate | Implemented, tested |
 | 2 | Cross-tool dedup, evidence context, confidence model, risk prioritization, triage workflow, seeded benchmark | Implemented, tested |
 | 3 | Isolated remediation (git worktree, hardened git), patch gates, red/green regression tests, approval gates | Implemented, tested |
-| 4 | Automated verification, regression detection | Partly: `--baseline` tracks new/recurring/no-longer-reported findings; no fix verification yet |
+| 4 | Automated verification: re-scan of the fixed tree, red/green evidence, final statuses, before/after, regression detection | Implemented, tested |
 | 5 | DAST/API testing (ZAP) on approved targets | Planned |
 | 6 | More ecosystems, Trivy, fuzzing, history scanning | Planned |
 
@@ -59,6 +59,15 @@ $S scan ./my-app                            # read-only, offline
 $S scan ./my-app --scope ~/scopes/my-app.json   # e.g. with network for dependency checks
 $S triage <run-dir> <run-dir>/triage.json   # apply validated triage + contextual findings
 $S scan ./my-app --baseline <old-run>/report.json   # track new / recurring findings
+$S compare old/report.json new/report.json  # diff two runs by stable finding ID
+
+# Remediation (needs modify_source; execute_project_code to run tests)
+$S fix start <run-dir>                      # isolated worktree + branch, operator tree untouched
+$S fix plan <run-dir> --finding SA-...      # remediation plan with approval flags
+$S fix apply <run-dir> --finding SA-... --patch fix.diff   # or edit the worktree, then `fix record`
+$S fix test <run-dir> --finding SA-... -- python -m pytest -q   # red/green regression check
+$S verify <run-dir> -- python -m pytest -q  # re-scan fixed tree, assign FIXED_VERIFIED/UNRESOLVED/...
+$S fix diff <run-dir>                       # review; `fix commit` only with the commit permission
 ```
 
 A scope manifest (stored **outside** the target) is the only way to grant permissions:
@@ -125,6 +134,21 @@ results are the point: scanners flag safe code, and the skill keeps those as
 tests exercise the triage plumbing with a fixed triage file, which is not a measurement of
 agent accuracy. Reproduce with `python tests/benchmark.py [--network] [--output file.json]`; methodology in
 [docs/BENCHMARK.md](docs/BENCHMARK.md).
+
+### Remediation benchmark
+
+`python tests/benchmark.py --remediation` runs four scripted fix scenarios on `fixtures/fixapp`
+(seeded SQL injection) and checks the status the verifier assigns:
+
+| Scenario | Expected | Actual |
+|---|---|---|
+| Correct fix + regression test | FIXED_VERIFIED | FIXED_VERIFIED |
+| Correct fix, no test (`--no-test-reason`) | FIX_APPLIED_UNVERIFIED | FIX_APPLIED_UNVERIFIED |
+| Cosmetic change that leaves the bug | UNRESOLVED | UNRESOLVED |
+| Correct fix that adds an `os.system` call | FIX_APPLIED_UNVERIFIED + regression flagged | same |
+
+Status accuracy 4/4, operator's uncommitted changes preserved in all four, ~8 s per scenario.
+These are scripted patches, so this measures the verifier, not an agent's ability to write fixes.
 
 ## Tests
 

@@ -97,7 +97,7 @@ See `skills/security-audit/references/finding-schema.md`. Key points:
 | 1 | Discovery, SAST, SCA, secrets, normalization, MD/JSON reports, scope gate | AC 1,2,3,4,6,7,13,14,15 on the fixture; benchmark recall reported | Implemented + tested (see README) |
 | 2 | Dedup tuning, confidence, evidence snippets, risk prioritization, triage workflow, benchmark metrics | AC 5,6; precision/recall/FP rate tracked per run | Implemented + tested |
 | 3 | Remediation: worktree isolation, regression tests, diff review, approval gates | AC 8,9,12 | Implemented + tested |
-| 4 | Verification: re-scan, diff findings, regression detection | AC 10,11 | Planned |
+| 4 | Verification: re-scan, diff findings, regression detection | AC 10,11 | Implemented + tested |
 | 5 | DAST/API testing against approved local targets (ZAP), rate limits | Scope enforcement tests on URLs | Planned |
 | 6 | More ecosystems, Trivy, fuzzing, history | per adapter | Planned |
 
@@ -118,3 +118,10 @@ See `skills/security-audit/references/finding-schema.md`. Key points:
 - Gate (`patchgate.py`) runs on every recorded diff; violations roll the worktree back to the last accepted tree.
 - Red/green: base worktree is reset to the pre-fix tree, the fix's test files are overlaid, the command must fail; the same command must pass in the fix worktree.
 - Residual risk: running project tests executes repository code with the operator's privileges (rlimits, scrubbed env, no network proxy, but no container). That is why it needs a separate `execute_project_code` permission.
+
+## 9. Phase 4 design notes (verification)
+
+- `verify` re-runs the scanners that completed in the original scan against the fix worktree (same scope, same excludes, permissions copied from the verified manifest) with the original report as baseline.
+- A finding counts as still present if its stable ID reappears, or if the same file has a hit from the same tool rule in the same CWE family (conservative: a reformatted but unfixed line is not "gone").
+- Status assignment is a pure function of recorded evidence (`_status`), unit-tested separately; new findings in files a fix touched downgrade FIXED_VERIFIED to FIX_APPLIED_UNVERIFIED and are reported as regressions.
+- Optional suite command runs on the fixed tree; its result is reported separately from per-finding status.
