@@ -1,0 +1,110 @@
+rules:
+  - id: js-express-taint-xss
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Request data is written into an HTML response without encoding (reflected XSS).
+    metadata:
+      cwe: ["CWE-79"]
+      confidence: "high"
+      impact: "high"
+      vuln_class: "xss"
+      title: "Reflected XSS"
+      fix: "Render through an auto-escaping template or encode output; never send raw request data as HTML."
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.query
+          - pattern: $REQ.params
+          - pattern: $REQ.body
+    pattern-sinks:
+      - pattern-either:
+          - pattern: $RES.send(...)
+          - pattern: $RES.write(...)
+
+  - id: js-taint-code-injection
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Request data reaches eval/Function (code injection).
+    metadata:
+      cwe: ["CWE-95"]
+      confidence: "high"
+      impact: "critical"
+      vuln_class: "code-injection"
+      title: "Code injection via eval"
+      fix: "Never evaluate user input; use a parser for the expected format."
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.query
+          - pattern: $REQ.params
+          - pattern: $REQ.body
+    pattern-sinks:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: new Function(...)
+          - pattern: vm.runInNewContext(...)
+
+  - id: js-taint-command-injection
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Request data reaches a shell command.
+    metadata:
+      cwe: ["CWE-78"]
+      confidence: "high"
+      impact: "critical"
+      vuln_class: "command-injection"
+      title: "OS command injection"
+      fix: "Use execFile/spawn with an argument array and validate input."
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.query
+          - pattern: $REQ.params
+          - pattern: $REQ.body
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern-inside: exec($CMD, ...)
+              - pattern-inside: execSync($CMD, ...)
+              - pattern-inside: $CP.exec($CMD, ...)
+              - pattern-inside: $CP.execSync($CMD, ...)
+          - pattern: $CMD
+
+  - id: js-taint-path-traversal
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Request data controls a file path read or sent to the client.
+    metadata:
+      cwe: ["CWE-22"]
+      confidence: "high"
+      impact: "high"
+      vuln_class: "path-traversal"
+      title: "Path traversal"
+      fix: "Resolve the path and verify it remains inside the base directory, or use res.sendFile with the root option."
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.query
+          - pattern: $REQ.params
+          - pattern: $REQ.body
+    pattern-sinks:
+      - pattern-either:
+          - pattern: $RES.sendFile(...)
+          - pattern: fs.readFile(...)
+          - pattern: fs.readFileSync(...)
+          - pattern: fs.createReadStream(...)
+
+  - id: js-sql-template-literal
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: SQL query built with a template literal or concatenation.
+    metadata:
+      cwe: ["CWE-89"]
+      confidence: "low"
+      impact: "high"
+      vuln_class: "sql-injection"
+      title: "SQL built with string interpolation"
+      fix: "Use parameterized queries."
+    pattern-either:
+      - pattern: $DB.query(`...${$X}...`, ...)
+      - pattern: $DB.query("..." + $X, ...)

@@ -1,0 +1,10 @@
+{
+  "name": "agentic-security-skill",
+  "version": "0.1.0",
+  "description": "Evidence-driven, scope-enforced application security audit skill: real scanners, normalized findings, honest Markdown/JSON reports.",
+  "author": {"name": "Harsh Dabas", "url": "https://github.com/itsHarshDabas"},
+  "homepage": "https://github.com/itsHarshDabas/Agentic-Security-Skill",
+  "repository": "https://github.com/itsHarshDabas/Agentic-Security-Skill",
+  "license": "MIT",
+  "keywords": ["security", "sast", "sca", "secrets", "audit", "appsec"]
+}

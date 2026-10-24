@@ -1,0 +1,235 @@
+rules:
+  - id: py-flask-taint-sqli
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: User-controlled data flows into a SQL string executed by the database driver.
+    metadata:
+      cwe: ["CWE-89"]
+      confidence: "high"
+      impact: "high"
+      vuln_class: "sql-injection"
+      title: "SQL injection from request data"
+      fix: "Use parameterized queries (placeholders + parameter tuple) or the ORM query builder."
+    pattern-sources:
+      - pattern-either:
+          - pattern: flask.request.$ATTR
+          - pattern: flask.request.$ATTR[...]
+          - pattern: flask.request.$ATTR.get(...)
+          - pattern: flask.request.get_json(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-inside: $DB.execute($Q, ...)
+          - pattern: $Q
+    pattern-sanitizers:
+      - pattern: int(...)
+
+  - id: py-sql-string-building
+    languages: [python]
+    severity: WARNING
+    message: SQL statement is built with string formatting. Safe only if every interpolated value is trusted.
+    metadata:
+      cwe: ["CWE-89"]
+      confidence: "low"
+      impact: "medium"
+      vuln_class: "sql-injection"
+      title: "SQL built with string formatting"
+      fix: "Pass values as parameters instead of formatting them into the SQL text."
+    patterns:
+      - pattern-either:
+          - pattern: $DB.execute(f"...", ...)
+          - pattern: $DB.execute("..." % $X, ...)
+          - pattern: $DB.execute("..." + $X, ...)
+          - pattern: $DB.execute("...".format(...), ...)
+
+  - id: py-shell-true-nonliteral
+    languages: [python]
+    severity: ERROR
+    message: A shell command is built from a non-constant value and run with shell=True.
+    metadata:
+      cwe: ["CWE-78"]
+      confidence: "medium"
+      impact: "high"
+      vuln_class: "command-injection"
+      title: "Shell command built from variable data"
+      fix: "Pass an argument list with shell=False and validate inputs against an allowlist."
+    patterns:
+      - pattern-either:
+          - pattern: subprocess.$F($CMD, ..., shell=True, ...)
+          - pattern: os.system($CMD)
+          - pattern: os.popen($CMD, ...)
+      - pattern-not: subprocess.$F("...", ...)
+      - pattern-not: os.system("...")
+      - pattern-not: os.popen("...", ...)
+
+  - id: py-flask-taint-path-traversal
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: Request data controls a filesystem path that is opened or sent to the client.
+    metadata:
+      cwe: ["CWE-22"]
+      confidence: "high"
+      impact: "high"
+      vuln_class: "path-traversal"
+      title: "Path traversal from request data"
+      fix: "Use flask.send_from_directory or resolve the path and verify it stays inside the base directory."
+    pattern-sources:
+      - pattern-either:
+          - pattern: flask.request.$ATTR
+          - pattern: flask.request.$ATTR[...]
+          - pattern: flask.request.$ATTR.get(...)
+    pattern-sinks:
+      - pattern-either:
+          - pattern: flask.send_file($P, ...)
+          - pattern: open($P, ...)
+          - pattern: os.remove($P)
+    pattern-sanitizers:
+      - pattern: werkzeug.utils.secure_filename(...)
+      - pattern: os.path.basename(...)
+
+  - id: py-flask-taint-ssrf
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: Request data controls the URL of an outbound HTTP request (server-side request forgery).
+    metadata:
+      cwe: ["CWE-918"]
+      confidence: "high"
+      impact: "high"
+      vuln_class: "ssrf"
+      title: "Server-side request forgery"
+      fix: "Allowlist destination hosts/schemes and block private, loopback and link-local addresses after DNS resolution."
+    pattern-sources:
+      - pattern-either:
+          - pattern: flask.request.$ATTR
+          - pattern: flask.request.$ATTR[...]
+          - pattern: flask.request.$ATTR.get(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern-inside: requests.$M($URL, ...)
+              - pattern-inside: urllib.request.urlopen($URL, ...)
+              - pattern-inside: httpx.$M($URL, ...)
+          - pattern: $URL
+
+  - id: py-flask-taint-open-redirect
+    mode: taint
+    languages: [python]
+    severity: WARNING
+    message: Request data controls a redirect target (open redirect).
+    metadata:
+      cwe: ["CWE-601"]
+      confidence: "high"
+      impact: "medium"
+      vuln_class: "open-redirect"
+      title: "Open redirect"
+      fix: "Only redirect to relative paths or an allowlist of hosts; reject scheme-relative URLs."
+    pattern-sources:
+      - pattern-either:
+          - pattern: flask.request.$ATTR
+          - pattern: flask.request.$ATTR[...]
+          - pattern: flask.request.$ATTR.get(...)
+    pattern-sinks:
+      - pattern: flask.redirect(...)
+
+  - id: py-flask-taint-ssti
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: Request data is concatenated into a Jinja template source (server-side template injection).
+    metadata:
+      cwe: ["CWE-1336"]
+      confidence: "high"
+      impact: "high"
+      vuln_class: "template-injection"
+      title: "Server-side template injection"
+      fix: "Use a static template and pass user data as a context variable."
+    pattern-sources:
+      - pattern-either:
+          - pattern: flask.request.$ATTR
+          - pattern: flask.request.$ATTR[...]
+          - pattern: flask.request.$ATTR.get(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-inside: flask.render_template_string($T, ...)
+          - pattern: $T
+
+  - id: py-unsafe-yaml-load
+    languages: [python]
+    severity: ERROR
+    message: yaml.load without a safe Loader can construct arbitrary Python objects.
+    metadata:
+      cwe: ["CWE-502"]
+      confidence: "high"
+      impact: "high"
+      vuln_class: "deserialization"
+      title: "Unsafe YAML deserialization"
+      fix: "Use yaml.safe_load."
+    patterns:
+      - pattern: yaml.load(...)
+      - pattern-not: yaml.load(..., Loader=yaml.SafeLoader, ...)
+      - pattern-not: yaml.load(..., Loader=yaml.CSafeLoader, ...)
+
+  - id: py-pickle-loads
+    languages: [python]
+    severity: WARNING
+    message: pickle deserialization executes code embedded in the data. Dangerous if the data can be attacker-controlled.
+    metadata:
+      cwe: ["CWE-502"]
+      confidence: "medium"
+      impact: "high"
+      vuln_class: "deserialization"
+      title: "Pickle deserialization"
+      fix: "Use JSON or another data-only format for untrusted input."
+    pattern-either:
+      - pattern: pickle.loads(...)
+      - pattern: pickle.load(...)
+
+  - id: py-flask-debug-enabled
+    languages: [python]
+    severity: WARNING
+    message: Flask debug mode exposes the Werkzeug debugger, which allows code execution if reachable.
+    metadata:
+      cwe: ["CWE-489"]
+      confidence: "high"
+      impact: "medium"
+      vuln_class: "debug-enabled"
+      title: "Flask debug mode enabled"
+      fix: "Never enable debug outside local development; read it from configuration."
+    pattern: $APP.run(..., debug=True, ...)
+
+  - id: py-flask-hardcoded-secret-key
+    languages: [python]
+    severity: WARNING
+    message: Flask SECRET_KEY is hardcoded. Anyone with the source can forge session cookies.
+    metadata:
+      cwe: ["CWE-798"]
+      confidence: "high"
+      impact: "high"
+      vuln_class: "hardcoded-secret"
+      title: "Hardcoded Flask secret key"
+      fix: "Load SECRET_KEY from the environment or a secret manager."
+    pattern-either:
+      - pattern: $APP.config["SECRET_KEY"] = "..."
+      - pattern: $APP.secret_key = "..."
+
+  - id: py-weak-password-hash
+    languages: [python]
+    severity: WARNING
+    message: A fast, unsalted hash is used on a password-like value.
+    metadata:
+      cwe: ["CWE-916"]
+      confidence: "medium"
+      impact: "high"
+      vuln_class: "weak-crypto"
+      title: "Weak password hashing"
+      fix: "Use argon2, bcrypt or scrypt via a maintained library."
+    patterns:
+      - pattern-either:
+          - pattern: hashlib.md5($X, ...)
+          - pattern: hashlib.sha1($X, ...)
+          - pattern: hashlib.sha256($X, ...)
+      - metavariable-regex:
+          metavariable: $X
+          regex: (?i).*(pass|pw|pwd).*

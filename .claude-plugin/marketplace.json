@@ -1,0 +1,11 @@
+{
+  "name": "agentic-security-skill",
+  "owner": {"name": "Harsh Dabas"},
+  "plugins": [
+    {
+      "name": "agentic-security-skill",
+      "source": "./",
+      "description": "Evidence-driven, scope-enforced application security audit skill."
+    }
+  ]
+}
