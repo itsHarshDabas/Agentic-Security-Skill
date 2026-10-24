@@ -23,12 +23,12 @@ def _f(tool, cwe, line=10, sev="medium", conf="medium"):
                    evidence=[Evidence(tool, "r", "m")], tools=[tool])
 
 
-def test_cross_tool_merge_keeps_all_evidence_and_raises_confidence():
+def test_cross_tool_merge_keeps_all_evidence_and_takes_highest_severity():
     merged = merge([_f("semgrep", "CWE-89", sev="high"), _f("bandit", "CWE-89", sev="medium")])
     assert len(merged) == 1
     f = merged[0]
     assert f.tools == ["semgrep", "bandit"] and len(f.evidence) == 2
-    assert f.severity == "high" and f.confidence == "high"
+    assert f.severity == "high" and f.confidence == "medium"
 
 
 def test_related_cwes_on_same_line_merge_but_different_lines_do_not():

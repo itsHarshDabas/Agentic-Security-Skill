@@ -28,6 +28,7 @@ def summarize(findings: list[dict], checks: list[dict]) -> dict:
         "by_severity": {s: sum(1 for f in active if f["severity"] == s) for s in SEVERITIES},
         "by_validation": dict(Counter(f["validation"] for f in findings)),
         "by_kind": dict(Counter(f["kind"] for f in active)),
+        "by_priority": dict(sorted(Counter(f.get("priority") or "n/a" for f in active).items())),
         "checks_by_status": dict(Counter(c["status"] for c in checks)),
         "release_blockers": [f["id"] for f in active if f["severity"] in ("critical", "high")
                              and f["validation"] in ("confirmed", "probable")],
@@ -129,11 +130,25 @@ def _markdown(r: dict) -> str:
         w(f"- {x}")
     w("")
 
+    queue = sorted((f for f in r["findings"] if f["validation"] != "false_positive"),
+                   key=lambda f: -(f.get("risk_score") or 0))[:15]
+    if queue:
+        w("## Prioritized remediation queue\n")
+        w("Risk score = severity weight x exposure x validation x confidence (factors listed per finding).\n")
+        w("| # | Priority | Risk | Finding | Severity | Validation | Location |")
+        w("|---|---|---|---|---|---|---|")
+        for i, f in enumerate(queue, 1):
+            loc = f["locations"][0] if f["locations"] else {}
+            w(f"| {i} | {f.get('priority')} | {f.get('risk_score')} | `{f['id']}` {_esc(f['title'][:60])} | "
+              f"{f['severity']} | {f['validation']} | `{loc.get('path')}:{loc.get('start_line') or ''}` |")
+        w("")
+
     w("## Findings\n")
     if not r["findings"]:
         w("No findings from the checks that ran.\n")
     for sev in SEVERITIES:
-        group = [f for f in r["findings"] if f["severity"] == sev and f["validation"] != "false_positive"]
+        group = sorted((f for f in r["findings"] if f["severity"] == sev and f["validation"] != "false_positive"),
+                       key=lambda f: -(f.get("risk_score") or 0))
         if not group:
             continue
         w(f"### {sev.capitalize()} ({len(group)})\n")
@@ -183,8 +198,19 @@ def _finding(w, f: dict) -> None:
         p = f["package"]
         w(f"- **Package** {p['ecosystem']}:{p['name']}@{p['version']} · advisories {', '.join(p['advisory_ids'][:6])}"
           + (f" · fixed in {', '.join(p['fixed_versions'][:4])}" if p["fixed_versions"] else ""))
-    w(f"- **Detected by** {', '.join(f['tools'])}")
-    if loc.get("snippet"):
+    w(f"- **Detected by** {', '.join(f['tools'])}" + (" · **In test code**" if f.get("in_test_code") else ""))
+    if f.get("risk_score") is not None:
+        w(f"- **Priority** {f['priority']} · **Risk** {f['risk_score']} ({_esc('; '.join(f.get('risk_factors', [])))})")
+        w(f"- **Confidence score** {f['confidence_score']} ({_esc('; '.join(f.get('confidence_factors', [])))})")
+    if f.get("code_context"):
+        w("")
+        w("  ```")
+        for c in f["code_context"]:
+            mark = ">" if loc.get("start_line") and loc["start_line"] <= c["line"] <= (loc.get("end_line") or loc["start_line"]) else " "
+            w(f"  {mark}{c['line']:>5} | {c['text'].replace('```', '` ` `')}")
+        w("  ```")
+        w("")
+    elif loc.get("snippet"):
         w(f"- **Code** `{_esc(loc['snippet'][:200])}`")
     w(f"- **Description** {_esc(f['description'][:600])}")
     if f.get("validation_rationale"):
