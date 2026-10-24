@@ -24,11 +24,10 @@ NOT_IMPLEMENTED = "NOT_IMPLEMENTED"
 # Checks the spec calls for that this release does not perform. Listed so the
 # report never implies coverage it does not have.
 UNIMPLEMENTED_CHECKS = [
-    ("container-iac", "Container image and IaC misconfiguration scanning (Trivy)", "config", [],
-     "Planned; Dockerfile/Compose/Actions are partially covered by bundled Semgrep rules"),
-    ("secrets-history", "Secret scanning across git history", "secrets", [],
-     "Planned; running git against an untrusted repository's config needs isolation first"),
-    ("fuzzing", "Fuzzing / property-based testing of input handlers", "testing", [], "Planned for Phase 6"),
+    ("container-image", "Vulnerability scanning of built container images (e.g. Trivy)", "sca", [],
+     "Not implemented; needs a container runtime. Dockerfiles are covered by checkov and Semgrep rules"),
+    ("fuzzing", "Fuzzing / property-based testing of input handlers", "testing", ["execute_project_code"],
+     "Not implemented; would execute project code under generated inputs"),
 ]
 
 

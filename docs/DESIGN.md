@@ -77,7 +77,9 @@ Assets: the operator's machine, credentials in the environment, the target's sou
 | SCA (all ecosystems) | OSV-Scanner | 2.7.0 | yes (api.osv.dev, deps.dev) | Implemented; **Blocked** in this sandbox (egress denied) |
 | SCA (Python) | pip-audit | 2.10.1 | yes (pypi.org) | Implemented |
 | SCA (Node) | npm audit | npm 10.9.4 | yes (registry.npmjs.org) | Implemented |
-| Container/IaC | Trivy | not installed | — | Planned (Phase 6); Docker/Compose/Actions covered by Semgrep rules for now |
+| IaC / pipelines | Checkov | 3.3.30 | no (`--skip-download`, no API key) | Implemented |
+| Secrets (history) | Gitleaks `git` mode | 8.30.1 | no | Implemented |
+| Container images | Trivy | not installed | — | Not implemented (needs a container runtime) |
 | DAST (passive) | built-in `dast.py` (stdlib http.client) | — | local target only | Implemented |
 | DAST baseline | OWASP ZAP `zap-baseline.py` | not installed (no Docker here) | local target | Implemented; tested with a fake binary only |
 
@@ -100,7 +102,7 @@ See `skills/security-audit/references/finding-schema.md`. Key points:
 | 3 | Remediation: worktree isolation, regression tests, diff review, approval gates | AC 8,9,12 | Implemented + tested |
 | 4 | Verification: re-scan, diff findings, regression detection | AC 10,11 | Implemented + tested |
 | 5 | Passive DAST against approved local targets, rate limits, optional ZAP baseline | Scope enforcement tests on URLs | Implemented + tested |
-| 6 | More ecosystems, Trivy, fuzzing, history | per adapter | Planned |
+| 6 | IaC (checkov), git-history secrets, run trends | per adapter tests | Implemented + tested; container images and fuzzing not implemented |
 
 ## 7. Risks and missing capabilities
 
@@ -135,3 +137,11 @@ See `skills/security-audit/references/finding-schema.md`. Key points:
 - Evidence: the request log (method, path, status, headers, timing; bodies are not stored) is saved to the run's evidence with sha256. Findings are `kind: dynamic`, `validation: confirmed` because they are direct observations of the response.
 - The scan records a `dast` check as `PENDING`; `secaudit dast` replaces it with `dast-http` (and `dast-zap`) results and the report's limitations change accordingly.
 - Residual risk: even GET requests can have side effects in badly designed applications; that is why only discovered parameterless GET routes are requested, and why the target must be a local/staging instance the operator names.
+
+## 11. Phase 6 design notes
+
+- **Checkov.** Checkov loads `.checkov.yaml` from the scanned directory even when `--config-file` is passed (verified with 3.3.30), and that file can skip checks or point `external-checks-dir` at Python in the repository, which checkov would import. So checkov never sees the target: the adapter copies only regular, IaC-shaped files (`*.tf`, `*.y(a)ml`, `*.json`, `Dockerfile*`, …, max 2 MB each, no symlinks, scope excludes applied, `.checkov*` dropped) into a temp mirror and scans that. `--quiet` is not used because it hides skipped checks; inline `checkov:skip` suppressions are reported as findings with the suppression noted. Findings are `kind: iac` (resource-level; not merged with line-level findings). Severities come from an engine-side map (`severity_source: secaudit-map`).
+- **Gitleaks config.** Without `--config`, gitleaks loads `.gitleaks.toml` from the scan root; a target could allowlist its own secrets (verified: an allowlist of `.*` hid a real match). Both gitleaks checks now pass a temp config containing only `[extend] useDefault = true`. This also hardens the Phase 1 working-tree scan.
+- **History secrets.** `gitleaks git` runs `git log -p` itself. The adapter refuses repositories whose local config sets code-executing keys (`safe_git.require_safe`, status `BLOCKED`), and passes `safe_git.OVERRIDES` to every git child through `GIT_CONFIG_COUNT/KEY/VALUE`, plus `--no-textconv --no-ext-diff` in the log options and `GIT_CONFIG_NOSYSTEM`/`GIT_CONFIG_GLOBAL=/dev/null`. Findings carry the commit and file, never the secret.
+- **History/trends.** `secaudit history` reads existing `report.json` files only; it reports per-run counts, new and no-longer-reported IDs, checks that did not complete, and findings open since an earlier run. It warns that "no longer reported" is not a fix.
+- **Not implemented:** container-image scanning (needs a runtime), fuzzing (would execute project code under generated inputs; would need its own permission and sandbox), Go/Java SAST beyond Semgrep's bundled rules.

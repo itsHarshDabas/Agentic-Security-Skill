@@ -13,7 +13,8 @@ def test_doctor_lists_every_adapter():
     r = run("doctor")
     assert r.returncode == 0
     names = {t["tool"] for t in json.loads(r.stdout)["tools"]}
-    assert names == {"semgrep", "bandit", "gitleaks", "osv-scanner", "pip-audit", "npm-audit"}
+    assert names == {"semgrep", "bandit", "gitleaks", "gitleaks-history", "checkov", "osv-scanner", "pip-audit",
+                     "npm-audit"}
 
 
 def test_scope_refusal_exit_code(tmp_path):
