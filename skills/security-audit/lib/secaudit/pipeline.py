@@ -24,8 +24,6 @@ NOT_IMPLEMENTED = "NOT_IMPLEMENTED"
 # Checks the spec calls for that this release does not perform. Listed so the
 # report never implies coverage it does not have.
 UNIMPLEMENTED_CHECKS = [
-    ("dast", "Dynamic application / API testing (OWASP ZAP) against an approved running target", "dast",
-     ["dynamic_testing", "network"], "Planned for Phase 5"),
     ("container-iac", "Container image and IaC misconfiguration scanning (Trivy)", "config", [],
      "Planned; Dockerfile/Compose/Actions are partially covered by bundled Semgrep rules"),
     ("secrets-history", "Secret scanning across git history", "secrets", [],
@@ -78,6 +76,10 @@ def plan_and_run(scope: Scope, store: RunStore, inventory: dict, only: set[str] 
     for cid, objective, cat, perms, reason in UNIMPLEMENTED_CHECKS:
         checks.append(CheckResult(check_id=cid, tool="-", objective=objective, category=cat,
                                   permissions_required=perms, status=NOT_IMPLEMENTED, reason=reason))
+    checks.append(CheckResult(
+        check_id="dast", tool="secaudit-http", category="dast", permissions_required=["dynamic_testing"],
+        objective="Passive dynamic checks against an approved running target", status="PENDING",
+        reason="not run by `scan`; run `secaudit dast <run> --url URL` (needs dynamic_testing and targets.urls)"))
     checks.append(CheckResult(
         check_id="agent-review", tool="agent", category="contextual",
         objective="Targeted manual-style review of high-risk code for issues scanners miss (authz, IDOR, logic)",

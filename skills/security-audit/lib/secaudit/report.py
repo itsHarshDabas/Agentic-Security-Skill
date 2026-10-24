@@ -16,8 +16,10 @@ LIMITATIONS = [
     "The bundled Semgrep rule pack is small and targets common Python/JS/Docker/CI issues; coverage is far below commercial rule sets.",
     "Dependency results reflect advisory databases at scan time and do not assess whether vulnerable code is reachable.",
     "Business-logic and authorization flaws are only covered by the agent's targeted review, which is non-deterministic and not exhaustive.",
-    "No dynamic testing was performed in this release; runtime configuration, headers, CORS and TLS were not tested.",
 ]
+NO_DAST = "No dynamic testing was performed for this run; runtime configuration, headers, cookies and CORS were not tested."
+PASSIVE_DAST = ("Dynamic checks were passive (GET only: headers, cookies, CORS, debug output) on the listed URLs; "
+                "no injection, authentication, authorization or TLS configuration testing was performed.")
 
 
 def summarize(findings: list[dict], checks: list[dict]) -> dict:
@@ -49,7 +51,8 @@ def render(store: RunStore) -> None:
         "inventory": inventory,
         "tools": [{"tool": c["tool"], "version": c["tool_version"]} for c in checks if c.get("tool_version")],
         "checks": checks,
-        "coverage_limitations": LIMITATIONS,
+        "coverage_limitations": LIMITATIONS + [PASSIVE_DAST if any(
+            c["category"] == "dast" and c["status"] in ("COMPLETED", "PARTIAL") for c in checks) else NO_DAST],
         "findings": findings,
         "triage_log": state.get("triage_log", []),
         "remediation": state.get("verification") or {"status": "not performed",

@@ -21,7 +21,7 @@ works from any shell or agent.
 | 2 | Cross-tool dedup, evidence context, confidence model, risk prioritization, triage workflow, seeded benchmark | Implemented, tested |
 | 3 | Isolated remediation (git worktree, hardened git), patch gates, red/green regression tests, approval gates | Implemented, tested |
 | 4 | Automated verification: re-scan of the fixed tree, red/green evidence, final statuses, before/after, regression detection | Implemented, tested |
-| 5 | DAST/API testing (ZAP) on approved targets | Planned |
+| 5 | Passive dynamic checks on approved local/staging URLs (headers, cookies, CORS, debug output), optional ZAP baseline | Implemented, tested (ZAP adapter tested with a fake binary only) |
 | 6 | More ecosystems, Trivy, fuzzing, history scanning | Planned |
 
 ## Install
@@ -68,6 +68,9 @@ $S fix apply <run-dir> --finding SA-... --patch fix.diff   # or edit the worktre
 $S fix test <run-dir> --finding SA-... -- python -m pytest -q   # red/green regression check
 $S verify <run-dir> -- python -m pytest -q  # re-scan fixed tree, assign FIXED_VERIFIED/UNRESOLVED/...
 $S fix diff <run-dir>                       # review; `fix commit` only with the commit permission
+
+# Passive dynamic checks (needs dynamic_testing + the URL in targets.urls)
+$S dast <run-dir> --url http://127.0.0.1:8000/ --max-requests 50 [--zap]
 ```
 
 A scope manifest (stored **outside** the target) is the only way to grant permissions:
@@ -89,6 +92,8 @@ See [`references/scope-manifest.md`](skills/security-audit/references/scope-mani
 | Dependencies (pinned requirements) | pip-audit | yes | `--no-deps --disable-pip`: never installs or resolves packages |
 | Dependencies (npm lockfile) | npm audit | yes | runs on a temp copy of `package.json` + lockfile only, empty npmrc |
 | Contextual review (authz, IDOR, logic) | the agent | no | recorded via `triage`, validated by the engine |
+| Runtime headers, cookies, CORS, debug output | built-in HTTP checker (`dast`) | local target | GET only, pinned IP, request budget; loopback/private addresses unless `external_services` |
+| DAST baseline | OWASP ZAP `zap-baseline.py` (`dast --zap`) | local target | passive scan; `UNAVAILABLE` if ZAP is not installed |
 
 ## Safety controls (enforced in code, covered by tests)
 
@@ -158,18 +163,21 @@ SECAUDIT_TOOL_PATH=$PWD/.venv/bin:$HOME/go/bin .venv/bin/python -m pytest -q    
 SECAUDIT_TEST_NETWORK=1 SECAUDIT_TOOL_PATH=... .venv/bin/python -m pytest -q          # + dependency scanners
 ```
 
-54 tests: scope/permission gate, path and symlink handling, subprocess hardening, env
+94 tests: scope/permission gate, path and symlink handling, subprocess hardening, env
 scrubbing, redaction, honest statuses for missing/failed/blocked/timed-out tools, evidence
 tamper detection, triage validation, stable IDs across edits, new-issue detection, no
-writes to the target, no secrets in outputs, and the seeded benchmark. Integration tests
-skip when a scanner is not installed.
+writes to the target, no secrets in outputs, the seeded benchmark, remediation isolation
+and patch gates, verification statuses, and dynamic-check scope enforcement (URL/origin
+match, private-address and metadata-IP refusal, DNS pinning, GET-only, budget, no redirect
+following) against a local test server. Integration tests skip when a scanner is not installed.
 
 ## Known limitations
 
 - OSV-Scanner needs api.osv.dev and api.deps.dev; when they are unreachable it is reported `BLOCKED`.
 - Git history is not scanned for secrets yet.
 - pip-audit only audits pinned `requirements*.txt` lines; unpinned lines make the check `PARTIAL`. `pyproject.toml`/`poetry.lock` rely on OSV-Scanner.
-- No container image, IaC (Terraform/K8s) or DAST coverage yet.
+- No container image or IaC (Terraform/K8s) coverage yet.
+- Dynamic checks are passive only: no injection, authentication, authorization, TLS-configuration or fuzz testing. HTTPS targets need a certificate valid for the hostname. ZAP was not available in the development sandbox (no Docker), so the ZAP adapter is tested only against a fake binary with ZAP's JSON format.
 - Scanners run as your user with rlimits, not in a container.
 
 ## Layout

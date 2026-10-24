@@ -22,7 +22,7 @@
 | Field | Notes |
 |---|---|
 | `id` | Stable. `SA-` code/config (rule family + path + normalized line text), `SEC-` secrets, `DEP-` dependencies (ecosystem + package + version + primary advisory). Line numbers are not part of the hash. |
-| `kind` | `code`, `config`, `secret`, `dependency`, `contextual` |
+| `kind` | `code`, `config`, `secret`, `dependency`, `contextual`, `dynamic` (location is a URL) |
 | `severity` | `critical`, `high`, `medium`, `low`, `info`; `severity_source` says where it came from (`tool`, `default (...)`, `triage`, `agent review`). |
 | `confidence` | `high`, `medium`, `low`. Raised one step when independent tools agree on the same line. |
 | `validation` | `confirmed`, `probable`, `unverified`, `informational`, `false_positive` |

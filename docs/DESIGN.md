@@ -78,7 +78,8 @@ Assets: the operator's machine, credentials in the environment, the target's sou
 | SCA (Python) | pip-audit | 2.10.1 | yes (pypi.org) | Implemented |
 | SCA (Node) | npm audit | npm 10.9.4 | yes (registry.npmjs.org) | Implemented |
 | Container/IaC | Trivy | not installed | — | Planned (Phase 6); Docker/Compose/Actions covered by Semgrep rules for now |
-| DAST | OWASP ZAP | not installed | — | Planned (Phase 5) |
+| DAST (passive) | built-in `dast.py` (stdlib http.client) | — | local target only | Implemented |
+| DAST baseline | OWASP ZAP `zap-baseline.py` | not installed (no Docker here) | local target | Implemented; tested with a fake binary only |
 
 The Semgrep public registry (semgrep.dev) is not reachable from this sandbox, and the community `semgrep-rules` repo has a license that restricts redistribution, so the skill ships its own small rule pack and accepts extra `--semgrep-config` paths the operator supplies.
 
@@ -98,7 +99,7 @@ See `skills/security-audit/references/finding-schema.md`. Key points:
 | 2 | Dedup tuning, confidence, evidence snippets, risk prioritization, triage workflow, benchmark metrics | AC 5,6; precision/recall/FP rate tracked per run | Implemented + tested |
 | 3 | Remediation: worktree isolation, regression tests, diff review, approval gates | AC 8,9,12 | Implemented + tested |
 | 4 | Verification: re-scan, diff findings, regression detection | AC 10,11 | Implemented + tested |
-| 5 | DAST/API testing against approved local targets (ZAP), rate limits | Scope enforcement tests on URLs | Planned |
+| 5 | Passive DAST against approved local targets, rate limits, optional ZAP baseline | Scope enforcement tests on URLs | Implemented + tested |
 | 6 | More ecosystems, Trivy, fuzzing, history | per adapter | Planned |
 
 ## 7. Risks and missing capabilities
@@ -125,3 +126,12 @@ See `skills/security-audit/references/finding-schema.md`. Key points:
 - A finding counts as still present if its stable ID reappears, or if the same file has a hit from the same tool rule in the same CWE family (conservative: a reformatted but unfixed line is not "gone").
 - Status assignment is a pure function of recorded evidence (`_status`), unit-tested separately; new findings in files a fix touched downgrade FIXED_VERIFIED to FIX_APPLIED_UNVERIFIED and are reported as regressions.
 - Optional suite command runs on the fixed tree; its result is reported separately from per-finding status.
+
+## 10. Phase 5 design notes (dynamic checks)
+
+- Deliberately passive. The skill does not ship injection, authentication-bypass or fuzzing payloads; those need a separately authorized engagement and purpose-built tools.
+- Authorization (`dast.authorize`): `dynamic_testing` permission; exact (scheme, host, port) match against `targets.urls`; no credentials in URLs; the host is resolved once and must be loopback/private unless `external_services` is granted; link-local, multicast, reserved and unspecified addresses are always refused. Requests are sent to the pinned IP with the original `Host` header (no DNS rebinding). `http.client` ignores proxy environment variables.
+- Traffic: GET only, plus one GET with `Origin: https://secaudit-origin-check.invalid` for CORS. Paths are the given URL and parameterless GET routes from discovery; `standard` intensity adds 11 well-known paths. Redirects are never followed. Budget (default 50, max 500 requests), minimum interval (default 0.2 s, min 0.05 s), 10 s timeout, 512 KB body cap.
+- Evidence: the request log (method, path, status, headers, timing; bodies are not stored) is saved to the run's evidence with sha256. Findings are `kind: dynamic`, `validation: confirmed` because they are direct observations of the response.
+- The scan records a `dast` check as `PENDING`; `secaudit dast` replaces it with `dast-http` (and `dast-zap`) results and the report's limitations change accordingly.
+- Residual risk: even GET requests can have side effects in badly designed applications; that is why only discovered parameterless GET routes are requested, and why the target must be a local/staging instance the operator names.
