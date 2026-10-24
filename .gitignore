@@ -1,0 +1,7 @@
+.venv/
+.tools/
+__pycache__/
+*.pyc
+.pytest_cache/
+secaudit-reports/
+/out/
