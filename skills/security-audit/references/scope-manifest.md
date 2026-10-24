@@ -13,6 +13,7 @@ auto-discovers one, so repository content cannot grant itself permissions.
   "permissions": {
     "network": false,
     "modify_source": false,
+    "execute_project_code": false,
     "dynamic_testing": false,
     "external_services": false,
     "commit": false,
@@ -29,7 +30,9 @@ auto-discovers one, so repository content cannot grant itself permissions.
 | `exclude` | Glob patterns matched against relative paths and path segments; passed to every tool. |
 | `permissions.network` | Allows dependency scanners to query OSV.dev / deps.dev, PyPI and the npm registry. Package names and versions leave the machine; source code does not. |
 | `permissions.write_reports_to_target` | Allows `--out` inside the target tree. |
-| `permissions.modify_source`, `commit` | Reserved for Phase 3 remediation; nothing uses them yet. |
+| `permissions.modify_source` | Allows `fix start`: creates a worktree and a `secaudit/fix-*` branch in the repository and records gated fixes there. The operator's working tree is not modified. |
+| `permissions.execute_project_code` | Allows `fix test` / `verify` to run the project's own test commands (argv, no shell, network-off env, timeout). This executes repository code; grant only for code you trust enough to run. |
+| `permissions.commit` | Allows `fix commit` on the session branch. Nothing is ever pushed. |
 | `permissions.dynamic_testing`, `targets.urls` | Reserved for Phase 5 DAST; nothing uses them yet. |
 | `intensity` | `passive` or `standard`; reserved for dynamic testing. |
 

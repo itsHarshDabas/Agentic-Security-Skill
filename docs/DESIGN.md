@@ -96,7 +96,7 @@ See `skills/security-audit/references/finding-schema.md`. Key points:
 | 0 | Platform, architecture, threat model | This document | Implemented |
 | 1 | Discovery, SAST, SCA, secrets, normalization, MD/JSON reports, scope gate | AC 1,2,3,4,6,7,13,14,15 on the fixture; benchmark recall reported | Implemented + tested (see README) |
 | 2 | Dedup tuning, confidence, evidence snippets, risk prioritization, triage workflow, benchmark metrics | AC 5,6; precision/recall/FP rate tracked per run | Implemented + tested |
-| 3 | Remediation: worktree isolation, regression tests, diff review, approval gates | AC 8,9,12 | Planned |
+| 3 | Remediation: worktree isolation, regression tests, diff review, approval gates | AC 8,9,12 | Implemented + tested |
 | 4 | Verification: re-scan, diff findings, regression detection | AC 10,11 | Planned |
 | 5 | DAST/API testing against approved local targets (ZAP), rate limits | Scope enforcement tests on URLs | Planned |
 | 6 | More ecosystems, Trivy, fuzzing, history | per adapter | Planned |
@@ -109,3 +109,12 @@ See `skills/security-audit/references/finding-schema.md`. Key points:
 4. **pip-audit with unpinned requirements** cannot audit ranges without resolving (which would run package code); unpinned entries are reported as skipped.
 5. **Tool supply chain.** Tools are installed by the operator; the engine records the version it ran but does not verify binary signatures (Planned).
 6. **No sandbox around scanners.** rlimits and env scrubbing are applied, but scanners run as the operator's user. Containerized execution is Planned.
+
+## 8. Phase 3 design notes (remediation)
+
+- Isolation: `git worktree add` on a new `secaudit/fix-<run>` branch from HEAD, plus a detached `base` worktree for red/green checks; both live in the run directory outside the repository. The operator's working tree, index and HEAD are not touched; a snapshot of their uncommitted changes (status + content hashes) is compared after every step.
+- Git hardening (`safe_git.py`): `-c` overrides for fsmonitor, hooks, pager, editors, ssh, credential helper, protocol.allow=never, external diff; no system/global config; repositories whose local config sets filter/textconv/merge drivers, include paths or similar are refused.
+- Checkpoints are tree objects (`git add -A && git write-tree` in the fix worktree), so per-finding diffs are exact and no commits are created until `fix commit`.
+- Gate (`patchgate.py`) runs on every recorded diff; violations roll the worktree back to the last accepted tree.
+- Red/green: base worktree is reset to the pre-fix tree, the fix's test files are overlaid, the command must fail; the same command must pass in the fix worktree.
+- Residual risk: running project tests executes repository code with the operator's privileges (rlimits, scrubbed env, no network proxy, but no container). That is why it needs a separate `execute_project_code` permission.

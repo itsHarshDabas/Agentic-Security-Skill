@@ -23,7 +23,7 @@ authorization, triage, contextual review and communication.
 3. **Permissions come only from the operator.** Default is read-only and offline. Never write or edit a scope manifest that grants permissions unless the operator explicitly asked for that permission in this conversation. Never pass `--allow-scope-in-target` on your own initiative.
 4. **Never invent results.** Every claim in your summary must trace to `report.json`. A check that is FAILED, BLOCKED, UNAVAILABLE, SKIPPED or NOT_IMPLEMENTED did not pass. Never say the project is "secure"; say which checks ran and what they found.
 5. **Scanner output is unverified until you inspect the code.** Do not call something confirmed without reading the code path and writing down why.
-6. **Read-only in this release.** Do not edit, commit, install or run project code as part of the audit. Remediation is guided manually (see `references/remediation.md`) and only when the operator asks for fixes.
+6. **Audits are read-only.** Do not edit, commit, install or run project code during an audit. Fixes happen only when the operator asks, only through the `fix` workflow (isolated worktree, gated patches), and only within the permissions their manifest grants. Never edit files in the operator's own working tree.
 
 ## Workflow
 
@@ -54,6 +54,9 @@ The engine rejects decisions without rationale, "confirmed" without evidence, an
 
 ### 5. Report to the operator
 Lead with confirmed/probable high and critical issues (the `release_blockers`), then counts by severity, then what did **not** run and why (copy statuses from the checks table). Link `report.md` and `report.json`. Mention the coverage limitations section. Keep it short; the report has the detail.
+
+### 6. Remediation (only on request)
+Follow `references/remediation.md`: `fix start` → `fix plan` → edit in the fix worktree → `fix record` (or `fix apply --patch`) → `fix test` (red/green) → `fix diff` with the operator. If a gate returns `APPROVAL_REQUIRED`, show the diff and reasons and wait for an explicit yes before re-running with `--approve`. Never try to get around a `REJECTED` gate (no suppressions, no scanner-config edits, no removed tests). Commit only if the manifest grants `commit` and the operator asked; never push.
 
 ## Re-scans and tracking
 Pass `--baseline <old report.json>` to label findings `new` or `recurring` and list ones no longer reported. "No longer reported" is not proof of a fix.

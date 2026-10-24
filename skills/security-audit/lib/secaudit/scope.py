@@ -17,7 +17,8 @@ from .paths import is_within, resolve_dir
 
 PERMISSIONS = (
     "network",                  # tools may contact vulnerability databases / registries
-    "modify_source",            # Phase 3: patch files in the target
+    "modify_source",            # Phase 3: create fix worktrees/branches and patch files
+    "execute_project_code",     # Phase 3/4: run the project's own test commands
     "dynamic_testing",          # Phase 5: send requests to running targets
     "external_services",        # contact services other than vuln DBs
     "commit",                   # create commits
